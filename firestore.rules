@@ -1,0 +1,173 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions for Multi-Tenant Role-Based Access Control (RBAC)
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isSuperAdmin() {
+      return isAuthenticated() && (
+        getUserData().role == 'SUPER_ADMIN' ||
+        request.auth.token.role == 'SUPER_ADMIN'
+      );
+    }
+
+    function getMemberDoc(societyId) {
+      return get(/databases/$(database)/documents/societies/$(societyId)/members/$(request.auth.uid)).data;
+    }
+
+    function hasActiveMembership(societyId) {
+      return isAuthenticated() && (
+        isSuperAdmin() ||
+        (
+          exists(/databases/$(database)/documents/societies/$(societyId)/members/$(request.auth.uid)) &&
+          getMemberDoc(societyId).membershipStatus == 'ACTIVE'
+        )
+      );
+    }
+
+    function isSocietyAdmin(societyId) {
+      return isAuthenticated() && (
+        isSuperAdmin() ||
+        (
+          exists(/databases/$(database)/documents/societies/$(societyId)/members/$(request.auth.uid)) &&
+          getMemberDoc(societyId).role == 'SOCIETY_ADMIN' &&
+          getMemberDoc(societyId).membershipStatus == 'ACTIVE'
+        )
+      );
+    }
+
+    function isSecurityGuard(societyId) {
+      return isAuthenticated() && (
+        isSocietyAdmin(societyId) ||
+        (
+          exists(/databases/$(database)/documents/societies/$(societyId)/members/$(request.auth.uid)) &&
+          getMemberDoc(societyId).role == 'SECURITY_GUARD' &&
+          getMemberDoc(societyId).membershipStatus == 'ACTIVE'
+        )
+      );
+    }
+
+    function isResident(societyId) {
+      return isAuthenticated() && (
+        isSocietyAdmin(societyId) ||
+        (
+          exists(/databases/$(database)/documents/societies/$(societyId)/members/$(request.auth.uid)) &&
+          getMemberDoc(societyId).role == 'RESIDENT' &&
+          getMemberDoc(societyId).membershipStatus == 'ACTIVE'
+        )
+      );
+    }
+
+    // User Profiles
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      // Allow user to create own record; prevent self-assigning SUPER_ADMIN role
+      allow create: if isAuthenticated() && request.auth.uid == userId && (
+        !('role' in request.resource.data) || request.resource.data.role != 'SUPER_ADMIN'
+      );
+      // User can update their own non-critical profile fields; Super Admin can update all
+      allow update: if isAuthenticated() && (
+        (request.auth.uid == userId && (
+          !('role' in request.resource.data) || request.resource.data.role == resource.data.role
+        )) ||
+        isSuperAdmin()
+      );
+      allow delete: if isSuperAdmin();
+    }
+
+    // Societies Collection
+    match /societies/{societyId} {
+      allow read: if isAuthenticated();
+      allow create, delete: if isSuperAdmin();
+      allow update: if isSuperAdmin() || isSocietyAdmin(societyId);
+
+      // Society Members Subcollection (Multi-tenant memberships)
+      match /members/{memberId} {
+        allow read: if isAuthenticated() && (
+          request.auth.uid == memberId ||
+          isSocietyAdmin(societyId) ||
+          isSuperAdmin()
+        );
+        // User can create their initial pending membership entry during onboarding
+        allow create: if isAuthenticated() && (
+          (request.auth.uid == memberId && request.resource.data.membershipStatus == 'PENDING') ||
+          isSocietyAdmin(societyId) ||
+          isSuperAdmin()
+        );
+        // Only Society Admins or Super Admins can update status (approve/reject/suspend)
+        allow update, delete: if isSocietyAdmin(societyId) || isSuperAdmin();
+      }
+    }
+
+    // Access Requests (Onboarding approval workflow)
+    match /accessRequests/{requestId} {
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        isSocietyAdmin(resource.data.societyId) ||
+        isSuperAdmin()
+      );
+      // New users can submit a pending access request for themselves
+      allow create: if isAuthenticated() && 
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.status == 'PENDING';
+      // Only Society Admin or Super Admin can approve/reject
+      allow update: if isAuthenticated() && (
+        isSocietyAdmin(resource.data.societyId) ||
+        isSuperAdmin()
+      );
+      allow delete: if isSuperAdmin();
+    }
+
+    // Service Partners
+    match /servicePartners/{partnerId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated() && (
+        request.auth.uid == partnerId || isSuperAdmin()
+      );
+      allow delete: if isSuperAdmin();
+    }
+
+    // Gate Passes & Visitors
+    match /gate_passes/{passId} {
+      allow read: if isAuthenticated() && hasActiveMembership(resource.data.societyId);
+      allow create: if isAuthenticated() && (
+        hasActiveMembership(request.resource.data.societyId) ||
+        request.auth.uid == request.resource.data.createdBy
+      );
+      allow update: if isAuthenticated() && (
+        isSecurityGuard(resource.data.societyId) ||
+        isSocietyAdmin(resource.data.societyId) ||
+        request.auth.uid == resource.data.createdBy
+      );
+      allow delete: if isSocietyAdmin(resource.data.societyId);
+    }
+
+    // Security Emergency Alerts
+    match /security_alerts/{alertId} {
+      allow read: if isAuthenticated() && hasActiveMembership(resource.data.societyId);
+      allow create: if isAuthenticated() && hasActiveMembership(request.resource.data.societyId);
+      allow update: if isAuthenticated() && (
+        isSecurityGuard(resource.data.societyId) ||
+        isSocietyAdmin(resource.data.societyId)
+      );
+      allow delete: if isSocietyAdmin(resource.data.societyId);
+    }
+
+    // Facility Bookings
+    match /facility_bookings/{bookingId} {
+      allow read: if isAuthenticated() && hasActiveMembership(resource.data.societyId);
+      allow create: if isAuthenticated() && hasActiveMembership(request.resource.data.societyId);
+      allow update, delete: if isAuthenticated() && (
+        request.auth.uid == resource.data.userId ||
+        isSocietyAdmin(resource.data.societyId)
+      );
+    }
+  }
+}

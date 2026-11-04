@@ -1,0 +1,83 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+
+    /* Happiiz Gate App Reference Design Tokens */
+    --bg-main: #FFFFFF;
+    --bg-card-primary: #F1F9FC;
+    --bg-card-secondary: #F5FAFC;
+    --border-card: #E6F1F5;
+    --text-primary: #111111;
+    --text-secondary: #A9B0B8;
+    --purple-primary: #673AB7;
+    --purple-dark: #512DA8;
+    --notification-red: #E53945;
+    --nav-bottom-bg: #050505;
+    --nav-bottom-inactive: #9DA3AD;
+    --nav-bottom-active: #FFFFFF;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background-color: var(--bg-main);
+    color: var(--text-primary);
+    min-height: 100vh;
+    overflow-x: hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* Safe Area Utilities for Mobile Notches & Gesture Bars */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 16px);
+}
+
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 16px);
+}
+
+.min-h-screen-safe {
+  min-height: calc(100vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+}
+
+/* Reference UI Cards & Containers */
+.card-light-blue {
+  background-color: #F1F9FC;
+  border: 1px solid #E6F1F5;
+  border-radius: 1.25rem;
+}
+
+.card-light-blue-secondary {
+  background-color: #F5FAFC;
+  border: 1px solid #E6F1F5;
+  border-radius: 1.25rem;
+}
+
+.btn-purple-primary {
+  background-color: #673AB7;
+  color: #FFFFFF;
+  transition: all 0.15s ease-in-out;
+}
+.btn-purple-primary:hover {
+  background-color: #512DA8;
+}
+
+/* Hide scrollbar for clean horizontal swipe containers */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Subtle, soft touch feedback */
+.active-press:active {
+  transform: scale(0.96);
+  transition: transform 0.1s ease;
+}
