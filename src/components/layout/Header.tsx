@@ -4,199 +4,167 @@
  */
 
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { ThemeToggle } from '../common/ThemeToggle';
-import { RoleBadge } from './RoleBadge';
 import { SecurityShield3D } from '../visuals/SecurityShield3D';
-import { Bell, LogOut, Shield, User, CheckCircle2 } from 'lucide-react';
-import { Modal } from '../common/Modal';
+import { Menu, X, LogOut, User } from 'lucide-react';
 
 export const Header: React.FC = () => {
-  const { user, logout, isFirebaseConfigured } = useAuth();
-  const [showNotifications, setShowNotifications] = useState(false);
+  const { user, logout } = useAuth();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleLogout = async () => {
     await logout();
     navigate('/login');
+    setShowProfileMenu(false);
+    setMobileMenuOpen(false);
   };
 
+  const navItems = [
+    { label: 'Gate Sentinel', path: '/dashboard/guard' },
+    { label: 'Resident Portal', path: '/dashboard/resident' },
+    { label: 'Service Partner', path: '/dashboard/service-partner' },
+  ];
+
   return (
-    <>
-      <header className="sticky top-0 z-30 h-16 w-full bg-[#FFFFFF] border-b border-[#E6F1F5] px-4 sm:px-6 flex items-center justify-between gap-4">
-        {/* Zone 1: Single text element wordmark with 3D emblem */}
-        <Link
-          to="/"
-          className="flex items-center gap-2.5 whitespace-nowrap shrink-0 group focus-visible:outline-none"
-        >
-          <SecurityShield3D size={32} />
-          <span className="text-base sm:text-lg font-bold tracking-tight text-[#111111] group-hover:text-[#673AB7] transition-colors">
-            Happiiz Gate
-          </span>
-        </Link>
+    <header className="sticky top-0 z-40 w-full bg-[#FFFFFF]/95 backdrop-blur-md border-b border-[#E6F1F5] px-4 sm:px-8 h-16 flex items-center justify-between">
+      {/* 1. Happiiz Gate Logo and Brand Name */}
+      <Link
+        to="/"
+        className="flex items-center gap-2.5 shrink-0 group focus-visible:outline-none"
+        onClick={() => setMobileMenuOpen(false)}
+      >
+        <SecurityShield3D size={32} />
+        <span className="text-base sm:text-lg font-bold tracking-tight text-[#111111] group-hover:text-[#673AB7] transition-colors">
+          Happiiz Gate
+        </span>
+      </Link>
 
-        {/* Zone 2: Navigation Links (Desktop) */}
-        <nav className="hidden md:flex items-center gap-6 text-xs sm:text-sm font-medium text-[#64748B]">
-          <Link
-            to="/dashboard/guard"
-            className="hover:text-[#673AB7] transition-colors whitespace-nowrap"
-          >
-            Gate Sentinel
-          </Link>
-          <Link
-            to="/dashboard/resident"
-            className="hover:text-[#673AB7] transition-colors whitespace-nowrap"
-          >
-            Resident Portal
-          </Link>
-          <Link
-            to="/dashboard/society-admin"
-            className="hover:text-[#673AB7] transition-colors whitespace-nowrap"
-          >
-            Society Admin
-          </Link>
-          <Link
-            to="/dashboard/super-admin"
-            className="hover:text-[#673AB7] transition-colors whitespace-nowrap"
-          >
-            Super Admin
-          </Link>
-        </nav>
-
-        {/* Zone 3: Primary Actions & User Profile */}
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-          {/* Active Role Badge with preview switcher */}
-          <RoleBadge />
-
-          {/* Notifications Icon with active badge */}
-          <button
-            onClick={() => setShowNotifications(true)}
-            className="relative p-2 rounded-xl text-[#64748B] hover:text-[#111111] bg-[#F1F9FC] border border-[#E6F1F5] transition-colors cursor-pointer"
-            aria-label="View notifications"
-          >
-            <Bell className="w-4 h-4" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#E53945] ring-2 ring-white" />
-          </button>
-
-          {/* Theme Toggle */}
-          <ThemeToggle />
-
-          {/* User Profile / Logout Button */}
-          {user ? (
-            <div className="relative">
-              <button
-                onClick={() => setShowProfileMenu((v) => !v)}
-                className="flex items-center gap-2 p-1 rounded-xl hover:bg-[#F1F9FC] transition-colors cursor-pointer"
-                aria-label="User profile menu"
-              >
-                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#673AB7] to-[#9333EA] text-white font-bold text-xs flex items-center justify-center shadow-sm">
-                  {user.displayName ? user.displayName.charAt(0).toUpperCase() : 'U'}
-                </div>
-              </button>
-
-              {showProfileMenu && (
-                <>
-                  <div
-                    className="fixed inset-0 z-40"
-                    onClick={() => setShowProfileMenu(false)}
-                  />
-                  <div className="absolute right-0 mt-2 w-56 rounded-2xl bg-[#FFFFFF] border border-[#E6F1F5] shadow-xl p-3 z-50 text-xs text-[#111111] animate-fade-in">
-                    <div className="pb-2.5 mb-2 border-b border-[#E6F1F5]">
-                      <p className="font-bold text-sm text-[#111111] truncate">
-                        {user.displayName}
-                      </p>
-                      <p className="text-[11px] text-[#A9B0B8] truncate">
-                        {user.phoneNumber || user.email || 'Verified User'}
-                      </p>
-                      {user.societyName && (
-                        <p className="text-[11px] text-[#673AB7] font-semibold mt-1 truncate">
-                          {user.societyName}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="space-y-1">
-                      <Link
-                        to="/profile"
-                        onClick={() => setShowProfileMenu(false)}
-                        className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-[#111111] hover:bg-[#F1F9FC] font-medium transition-colors cursor-pointer"
-                      >
-                        <User className="w-4 h-4 text-[#673AB7]" />
-                        <span>Profile & Security</span>
-                      </Link>
-                      <Link
-                        to="/select-society"
-                        onClick={() => setShowProfileMenu(false)}
-                        className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-[#111111] hover:bg-[#F1F9FC] font-medium transition-colors cursor-pointer"
-                      >
-                        <Shield className="w-4 h-4 text-[#0EA5E9]" />
-                        <span>Switch Society</span>
-                      </Link>
-                      <button
-                        onClick={handleLogout}
-                        className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-[#E53945] hover:bg-red-50 font-medium transition-colors cursor-pointer"
-                      >
-                        <LogOut className="w-4 h-4" />
-                        <span>Sign Out</span>
-                      </button>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          ) : (
+      {/* Desktop Navigation: Exactly Gate Sentinel | Resident Portal | Service Partner */}
+      <nav className="hidden md:flex items-center gap-8 text-sm font-semibold text-[#64748B]">
+        {navItems.map((item) => {
+          const isActive = location.pathname === item.path;
+          return (
             <Link
-              to="/login"
-              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-[#673AB7] text-white hover:bg-[#512DA8] transition-colors"
+              key={item.path}
+              to={item.path}
+              className={`transition-colors whitespace-nowrap py-1 border-b-2 ${
+                isActive
+                  ? 'text-[#673AB7] border-[#673AB7] font-bold'
+                  : 'border-transparent hover:text-[#673AB7]'
+              }`}
             >
-              Sign In
+              {item.label}
             </Link>
+          );
+        })}
+      </nav>
+
+      {/* Right Action: Clean User Status / Sign In / Mobile Toggle */}
+      <div className="flex items-center gap-3">
+        {user ? (
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowProfileMenu((v) => !v)}
+              className="flex items-center gap-2 p-1 rounded-xl hover:bg-[#F1F9FC] transition-colors cursor-pointer"
+              aria-label="User profile menu"
+            >
+              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#673AB7] to-[#9333EA] text-white font-bold text-xs flex items-center justify-center shadow-xs">
+                {user.displayName ? user.displayName.charAt(0).toUpperCase() : 'U'}
+              </div>
+            </button>
+
+            {showProfileMenu && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setShowProfileMenu(false)}
+                />
+                <div className="absolute right-0 mt-2 w-52 rounded-2xl bg-[#FFFFFF] border border-[#E6F1F5] shadow-xl p-2.5 z-50 text-xs text-[#111111] animate-fade-in">
+                  <div className="px-2 py-1.5 border-b border-[#E6F1F5] mb-1.5">
+                    <p className="font-bold text-[#111111] truncate">{user.displayName || 'Verified User'}</p>
+                    <p className="text-[11px] text-[#A9B0B8] truncate">{user.phoneNumber || user.email}</p>
+                  </div>
+                  <Link
+                    to="/profile"
+                    onClick={() => setShowProfileMenu(false)}
+                    className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-[#111111] hover:bg-[#F1F9FC] font-medium transition-colors"
+                  >
+                    <User className="w-4 h-4 text-[#673AB7]" />
+                    <span>Profile Settings</span>
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-[#E53945] hover:bg-red-50 font-medium transition-colors cursor-pointer"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span>Sign Out</span>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        ) : (
+          <Link
+            to="/login"
+            className="hidden sm:inline-flex text-xs font-semibold px-3.5 py-1.5 rounded-xl bg-[#673AB7] text-white hover:bg-[#512DA8] shadow-xs transition-colors"
+          >
+            Sign In
+          </Link>
+        )}
+
+        {/* Mobile Menu Button */}
+        <button
+          type="button"
+          onClick={() => setMobileMenuOpen((v) => !v)}
+          className="md:hidden p-2 rounded-xl text-[#64748B] hover:text-[#111111] hover:bg-[#F1F9FC] transition-colors cursor-pointer"
+          aria-label="Toggle navigation menu"
+        >
+          {mobileMenuOpen ? <X className="w-5 h-5 text-[#111111]" /> : <Menu className="w-5 h-5" />}
+        </button>
+      </div>
+
+      {/* Mobile Navigation Dropdown: Only Gate Sentinel, Resident Portal, Service Partner */}
+      {mobileMenuOpen && (
+        <div className="md:hidden absolute top-16 left-0 w-full bg-[#FFFFFF] border-b border-[#E6F1F5] shadow-lg p-4 space-y-2 animate-fade-in z-50">
+          <nav className="flex flex-col space-y-1">
+            {navItems.map((item) => {
+              const isActive = location.pathname === item.path;
+              return (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`px-4 py-3 rounded-xl text-sm font-semibold transition-colors flex items-center justify-between ${
+                    isActive
+                      ? 'bg-[#F1F9FC] text-[#673AB7]'
+                      : 'text-[#111111] hover:bg-[#F1F9FC]'
+                  }`}
+                >
+                  <span>{item.label}</span>
+                </Link>
+              );
+            })}
+          </nav>
+
+          {!user && (
+            <div className="pt-2 border-t border-[#E6F1F5]">
+              <Link
+                to="/login"
+                onClick={() => setMobileMenuOpen(false)}
+                className="w-full py-2.5 rounded-xl bg-[#673AB7] text-white text-xs font-bold flex items-center justify-center hover:bg-[#512DA8] transition-colors"
+              >
+                Sign In with Mobile OTP
+              </Link>
+            </div>
           )}
         </div>
-      </header>
-
-      {/* Notifications Drawer Modal */}
-      <Modal
-        isOpen={showNotifications}
-        onClose={() => setShowNotifications(false)}
-        title="Gate & Society Alerts"
-        description="Real-time security and visitor notifications"
-        maxWidth="sm"
-      >
-        <div className="space-y-3">
-          <div className="p-3 rounded-xl bg-sky-500/10 border border-sky-500/20 text-xs">
-            <div className="flex items-center justify-between font-semibold text-sky-400 mb-1">
-              <span>Visitor Approved</span>
-              <span className="text-[10px] text-slate-400">10m ago</span>
-            </div>
-            <p className="text-slate-300">
-              Karan Mehra (Guest for B-704) cleared entry via North Gate #1.
-            </p>
-          </div>
-          <div className="p-3 rounded-xl bg-slate-800/60 border border-slate-700/60 text-xs">
-            <div className="flex items-center justify-between font-semibold text-slate-300 mb-1">
-              <span>Delivery Entry Pass</span>
-              <span className="text-[10px] text-slate-400">24m ago</span>
-            </div>
-            <p className="text-slate-400">
-              Swiggy food delivery checked in with pass code #1839.
-            </p>
-          </div>
-          <div className="p-3 rounded-xl bg-slate-800/60 border border-slate-700/60 text-xs">
-            <div className="flex items-center justify-between font-semibold text-slate-300 mb-1">
-              <span>Firebase Status</span>
-              <span className="text-[10px] text-slate-400">System</span>
-            </div>
-            <p className="text-slate-400">
-              {isFirebaseConfigured
-                ? 'Production Firestore & Auth connected.'
-                : 'Running in Local Development Preview Mode. Sample data enabled.'}
-            </p>
-          </div>
-        </div>
-      </Modal>
-    </>
+      )}
+    </header>
   );
 };
