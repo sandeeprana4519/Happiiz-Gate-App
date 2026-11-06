@@ -104,6 +104,96 @@ service cloud.firestore {
         // Only Society Admins or Super Admins can update status (approve/reject/suspend)
         allow update, delete: if isSocietyAdmin(societyId) || isSuperAdmin();
       }
+
+      // Buildings & Towers Subcollection
+      match /buildings/{buildingId} {
+        allow read: if isAuthenticated() && hasActiveMembership(societyId);
+        allow write: if isSocietyAdmin(societyId);
+      }
+
+      // Flats & Units Subcollection
+      match /flats/{flatId} {
+        allow read: if isAuthenticated() && hasActiveMembership(societyId);
+        allow write: if isSocietyAdmin(societyId);
+      }
+
+      // Gates Subcollection
+      match /gates/{gateId} {
+        allow read: if isAuthenticated() && hasActiveMembership(societyId);
+        allow write: if isSocietyAdmin(societyId);
+      }
+
+      // Notices Subcollection
+      match /notices/{noticeId} {
+        allow read: if isAuthenticated() && hasActiveMembership(societyId);
+        allow write: if isSocietyAdmin(societyId);
+      }
+
+      // Complaints & HelpDesk Subcollection
+      match /complaints/{complaintId} {
+        allow read: if isAuthenticated() && hasActiveMembership(societyId);
+        allow create: if isAuthenticated() && hasActiveMembership(societyId);
+        allow update, delete: if isSocietyAdmin(societyId) || (isAuthenticated() && resource.data.residentId == request.auth.uid);
+      }
+
+      // Maintenance Invoices Subcollection
+      match /invoices/{invoiceId} {
+        allow read: if isAuthenticated() && (
+          isSocietyAdmin(societyId) ||
+          resource.data.residentId == request.auth.uid
+        );
+        allow write: if isSocietyAdmin(societyId);
+      }
+
+      // Amenities Subcollection
+      match /amenities/{amenityId} {
+        allow read: if isAuthenticated() && hasActiveMembership(societyId);
+        allow write: if isSocietyAdmin(societyId);
+      }
+
+      // Amenity Bookings Subcollection
+      match /bookings/{bookingId} {
+        allow read: if isAuthenticated() && hasActiveMembership(societyId);
+        allow create: if isAuthenticated() && hasActiveMembership(societyId);
+        allow update, delete: if isSocietyAdmin(societyId) || (isAuthenticated() && resource.data.residentId == request.auth.uid);
+      }
+
+      // Emergency Alerts Subcollection
+      match /emergencyAlerts/{alertId} {
+        allow read: if isAuthenticated() && hasActiveMembership(societyId);
+        allow create: if isAuthenticated() && hasActiveMembership(societyId);
+        allow update: if isSocietyAdmin(societyId) || isSecurityGuard(societyId);
+        allow delete: if isSocietyAdmin(societyId);
+      }
+
+      // Household Members Subcollection
+      match /household/{householdId} {
+        allow read: if isAuthenticated() && hasActiveMembership(societyId);
+        allow write: if isSocietyAdmin(societyId) || (isAuthenticated() && resource.data.residentId == request.auth.uid);
+      }
+
+      // Domestic Helpers Subcollection
+      match /helpers/{helperId} {
+        allow read: if isAuthenticated() && hasActiveMembership(societyId);
+        allow write: if isSocietyAdmin(societyId);
+      }
+
+      // Vehicles Subcollection
+      match /vehicles/{vehicleId} {
+        allow read: if isAuthenticated() && hasActiveMembership(societyId);
+        allow write: if isSocietyAdmin(societyId) || (isAuthenticated() && resource.data.residentId == request.auth.uid);
+      }
+
+      // Staff Subcollection
+      match /staff/{staffId} {
+        allow read, write: if isSocietyAdmin(societyId);
+      }
+
+      // Detailed Settings Subcollection
+      match /settings/{settingId} {
+        allow read: if isAuthenticated() && hasActiveMembership(societyId);
+        allow write: if isSocietyAdmin(societyId);
+      }
     }
 
     // Access Requests (Onboarding approval workflow)
@@ -130,6 +220,24 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow create, update: if isAuthenticated() && (
         request.auth.uid == partnerId || isSuperAdmin()
+      );
+      allow delete: if isSuperAdmin();
+    }
+
+    // Service Bookings
+    match /service_bookings/{bookingId} {
+      allow read: if isAuthenticated() && (
+        resource.data.residentUid == request.auth.uid ||
+        resource.data.partnerId == request.auth.uid ||
+        isSocietyAdmin(resource.data.societyId) ||
+        isSuperAdmin()
+      );
+      allow create: if isAuthenticated() && request.resource.data.residentUid == request.auth.uid;
+      allow update: if isAuthenticated() && (
+        resource.data.residentUid == request.auth.uid ||
+        resource.data.partnerId == request.auth.uid ||
+        isSocietyAdmin(resource.data.societyId) ||
+        isSuperAdmin()
       );
       allow delete: if isSuperAdmin();
     }
@@ -168,6 +276,64 @@ service cloud.firestore {
         request.auth.uid == resource.data.userId ||
         isSocietyAdmin(resource.data.societyId)
       );
+    }
+
+    // Subscription Plans (Platform-wide)
+    match /subscriptionPlans/{planId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isSuperAdmin();
+    }
+
+    // Society Subscriptions
+    match /subscriptions/{subscriptionId} {
+      allow read: if isAuthenticated() && (
+        isSuperAdmin() ||
+        isSocietyAdmin(resource.data.societyId)
+      );
+      allow create, update, delete: if isSuperAdmin();
+    }
+
+    // Financial Transactions (Audit & Payment Integrity)
+    match /transactions/{transactionId} {
+      allow read: if isAuthenticated() && (
+        isSuperAdmin() ||
+        (resource.data.referenceId != null && isSocietyAdmin(resource.data.referenceId))
+      );
+      allow create, update, delete: if isSuperAdmin();
+    }
+
+    // Platform Support & Complaint Tickets
+    match /supportTickets/{ticketId} {
+      allow read: if isAuthenticated() && (
+        isSuperAdmin() ||
+        resource.data.submittedByUid == request.auth.uid ||
+        (resource.data.societyId != null && isSocietyAdmin(resource.data.societyId))
+      );
+      allow create: if isAuthenticated() && request.resource.data.submittedByUid == request.auth.uid;
+      allow update: if isAuthenticated() && (
+        isSuperAdmin() ||
+        resource.data.submittedByUid == request.auth.uid
+      );
+      allow delete: if isSuperAdmin();
+    }
+
+    // Platform Announcements & Notifications
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isSuperAdmin();
+    }
+
+    // Administrative Audit Logs (Append-only & Immutable)
+    match /auditLogs/{logId} {
+      allow read: if isSuperAdmin();
+      allow create: if isAuthenticated(); // Append-only audit events
+      allow update, delete: if false; // Strict immutability
+    }
+
+    // Platform Global Settings
+    match /platformSettings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isSuperAdmin();
     }
   }
 }

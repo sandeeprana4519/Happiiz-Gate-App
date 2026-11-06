@@ -6,7 +6,6 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { GlassCard } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import {
@@ -21,6 +20,8 @@ import {
   ChevronLeft,
   AlertCircle,
   FileCheck,
+  Shield,
+  Upload,
 } from 'lucide-react';
 
 export const SocietyAdminRegistration: React.FC = () => {
@@ -30,19 +31,22 @@ export const SocietyAdminRegistration: React.FC = () => {
   const [societyName, setSocietyName] = useState('');
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
+  const [pinCode, setPinCode] = useState('');
   const [address, setAddress] = useState('');
-  const [totalFlats, setTotalFlats] = useState('300');
+  const [totalTowers, setTotalTowers] = useState('4');
+  const [totalFlats, setTotalFlats] = useState('320');
   const [contactEmail, setContactEmail] = useState(user?.email || '');
   const [contactPhone, setContactPhone] = useState(user?.phoneNumber || '');
   const [designation, setDesignation] = useState('President');
+  const [registrationCertNo, setRegistrationCertNo] = useState('');
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!societyName.trim() || !city.trim() || !address.trim()) {
-      setError('Please fill in all required society details.');
+    if (!societyName.trim() || !city.trim() || !address.trim() || !pinCode.trim()) {
+      setError('Please fill in all required society address and location details.');
       return;
     }
 
@@ -51,7 +55,10 @@ export const SocietyAdminRegistration: React.FC = () => {
     setLoading(true);
     try {
       const societyId = `soc_${Date.now()}`;
-      const societyCode = societyName.substring(0, 3).toUpperCase() + '-' + Math.floor(10 + Math.random() * 90);
+      const societyCode =
+        societyName.substring(0, 3).toUpperCase().replace(/[^A-Z]/g, 'SOC') +
+        '-' +
+        Math.floor(10 + Math.random() * 90);
       const requestId = `REQ-SOC-${Date.now()}`;
 
       // 1. Create society record with status: PENDING_VERIFICATION
@@ -62,8 +69,8 @@ export const SocietyAdminRegistration: React.FC = () => {
         city: city.trim(),
         state: state.trim() || 'State',
         country: 'India',
-        address: address.trim(),
-        contactEmail: contactEmail.trim(),
+        address: `${address.trim()}, PIN: ${pinCode.trim()}`,
+        contactEmail: contactEmail.trim() || undefined,
         contactPhone: contactPhone.trim(),
         totalFlats: parseInt(totalFlats) || 100,
         occupiedFlats: 0,
@@ -99,7 +106,7 @@ export const SocietyAdminRegistration: React.FC = () => {
           societyCity: city.trim(),
           societyAddress: address.trim(),
           contactPhone,
-          additionalNotes: `Designation: ${designation}. Proposed total flats: ${totalFlats}.`,
+          additionalNotes: `Designation: ${designation}. Towers: ${totalTowers}. Flats: ${totalFlats}. Reg Cert: ${registrationCertNo || 'Not provided'}.`,
         },
         status: 'PENDING',
         submittedAt: new Date().toISOString(),
@@ -108,6 +115,7 @@ export const SocietyAdminRegistration: React.FC = () => {
       // 4. Update user profile onboarding state
       await updateFirestoreUserProfile(user.uid, {
         primaryRole: 'SOCIETY_ADMIN',
+        role: 'SOCIETY_ADMIN',
         accountStatus: 'PENDING',
         onboardingCompleted: true,
       });
@@ -125,28 +133,40 @@ export const SocietyAdminRegistration: React.FC = () => {
     <div className="max-w-xl mx-auto py-6 sm:py-10 space-y-6 px-2">
       <Link
         to="/onboarding"
-        className="inline-flex items-center gap-1.5 text-xs text-sky-500 font-semibold hover:text-sky-400"
+        className="inline-flex items-center gap-1.5 text-xs text-[#673AB7] font-semibold hover:underline"
       >
         <ChevronLeft className="w-4 h-4" /> Back to Role Selection
       </Link>
 
       <div className="space-y-1">
-        <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-          <Building2 className="w-6 h-6 text-blue-500" />
+        <h1 className="text-2xl font-extrabold text-[#111111] flex items-center gap-2">
+          <Building2 className="w-6 h-6 text-[#673AB7]" />
           <span>Society Onboarding Registration</span>
         </h1>
-        <p className="text-xs text-slate-500 dark:text-slate-400">
-          Register a new residential complex for verification by Platform Super Admin.
+        <p className="text-xs text-[#A9B0B8]">
+          Onboard a residential society or gated community for Platform Super Admin approval.
         </p>
       </div>
 
-      <GlassCard elevated className="border-sky-500/20 p-6 sm:p-8 space-y-6">
+      <div className="w-full rounded-2xl bg-[#FFFFFF] border border-[#E6F1F5] shadow-[0_4px_24px_rgba(0,0,0,0.06)] p-6 sm:p-8 space-y-6">
         {error && (
-          <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-500 font-medium flex items-center gap-2">
+          <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-xs text-[#E53945] font-medium flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{error}</span>
           </div>
         )}
+
+        {/* Applicant Verification Summary */}
+        <div className="p-3.5 rounded-xl bg-[#F1F9FC] border border-[#E6F1F5] flex items-center justify-between text-xs">
+          <div>
+            <span className="text-[#A9B0B8] block text-[10px] font-semibold uppercase">Admin Officer</span>
+            <span className="font-bold text-[#111111] text-sm">{user?.fullName || 'Society Representative'}</span>
+          </div>
+          <div className="text-right">
+            <span className="text-[#A9B0B8] block text-[10px] font-semibold uppercase">Verified Mobile</span>
+            <span className="font-mono font-bold text-[#673AB7]">{user?.phoneNumber || '+91'}</span>
+          </div>
+        </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input
@@ -160,44 +180,36 @@ export const SocietyAdminRegistration: React.FC = () => {
           <div className="grid grid-cols-2 gap-3">
             <Input
               label="City"
-              placeholder="e.g. Bengaluru, Mumbai, Pune"
+              placeholder="e.g. Bengaluru, Pune, Mumbai"
               value={city}
               onChange={(e) => setCity(e.target.value)}
               required
             />
             <Input
-              label="State / Province"
-              placeholder="e.g. Karnataka"
+              label="State"
+              placeholder="e.g. Karnataka, Maharashtra"
               value={state}
               onChange={(e) => setState(e.target.value)}
+              required
             />
           </div>
 
-          <Input
-            label="Full Society Physical Address"
-            placeholder="Survey No, Main Road, Landmark, Postal Code"
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-            required
-          />
-
           <div className="grid grid-cols-2 gap-3">
             <Input
-              label="Total Flats / Villas Count"
-              type="number"
-              placeholder="250"
-              value={totalFlats}
-              onChange={(e) => setTotalFlats(e.target.value)}
+              label="PIN Code"
+              placeholder="e.g. 560103"
+              value={pinCode}
+              onChange={(e) => setPinCode(e.target.value)}
               required
             />
             <div>
-              <label className="block text-xs font-semibold tracking-wide text-slate-700 dark:text-slate-300 mb-1.5">
+              <label className="block text-xs font-semibold tracking-wide text-[#111111] mb-1.5">
                 Committee Designation
               </label>
               <select
                 value={designation}
                 onChange={(e) => setDesignation(e.target.value)}
-                className="w-full min-h-[44px] h-11 rounded-xl px-3.5 text-xs bg-white/80 dark:bg-slate-900/80 border border-slate-300 dark:border-slate-800 text-slate-900 dark:text-white outline-none focus:border-sky-500"
+                className="w-full min-h-[44px] h-11 rounded-xl px-3.5 text-xs bg-[#F1F9FC] border border-[#E6F1F5] text-[#111111] outline-none focus:border-[#673AB7]"
               >
                 <option value="President">Society President</option>
                 <option value="Secretary">General Secretary</option>
@@ -205,6 +217,32 @@ export const SocietyAdminRegistration: React.FC = () => {
                 <option value="Estate Manager">Estate Manager / Facility Head</option>
               </select>
             </div>
+          </div>
+
+          <Input
+            label="Full Physical Address"
+            placeholder="Survey No, Main Road, Landmark"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            required
+          />
+
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Number of Towers / Wings"
+              type="number"
+              placeholder="4"
+              value={totalTowers}
+              onChange={(e) => setTotalTowers(e.target.value)}
+            />
+            <Input
+              label="Total Flats / Villas Count"
+              type="number"
+              placeholder="320"
+              value={totalFlats}
+              onChange={(e) => setTotalFlats(e.target.value)}
+              required
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -216,22 +254,21 @@ export const SocietyAdminRegistration: React.FC = () => {
               onChange={(e) => setContactEmail(e.target.value)}
             />
             <Input
-              label="Official Contact Phone"
-              type="tel"
-              placeholder="+91 98450 12345"
-              value={contactPhone}
-              onChange={(e) => setContactPhone(e.target.value)}
+              label="Registration Certificate No."
+              placeholder="e.g. REG/SOC/2022/411"
+              value={registrationCertNo}
+              onChange={(e) => setRegistrationCertNo(e.target.value)}
             />
           </div>
 
-          <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400 space-y-1">
-            <div className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-              <FileCheck className="w-4 h-4 text-blue-500" />
+          <div className="p-3.5 rounded-xl bg-[#F5FAFC] border border-[#E6F1F5] text-xs text-[#A9B0B8] space-y-1">
+            <div className="font-semibold text-[#111111] flex items-center gap-1.5">
+              <Shield className="w-4 h-4 text-[#673AB7]" />
               <span>Platform Super Admin Review</span>
             </div>
-            <p>
+            <p className="leading-relaxed">
               New society onboarding requires verification of society registration and
-              authorized committee credentials by the Happiiz Gate Super Admin team.
+              authorized committee credentials by the Happiiz Gate Super Admin team before tenant activation.
             </p>
           </div>
 
@@ -243,10 +280,10 @@ export const SocietyAdminRegistration: React.FC = () => {
             loading={loading}
             rightIcon={<ArrowRight className="w-4 h-4" />}
           >
-            Submit Society Registration
+            Submit Society Application
           </Button>
         </form>
-      </GlassCard>
+      </div>
     </div>
   );
 };

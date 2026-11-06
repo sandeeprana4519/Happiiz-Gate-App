@@ -48,7 +48,9 @@ export interface UserProfile {
   societyId?: string; // Compatibility alias
   flatNumber?: string; // Compatibility alias
   block?: string; // Compatibility alias
+  buildingName?: string; // Compatibility alias
   partnerCompany?: string; // Compatibility alias
+  partnerId?: string; // Compatibility alias
 }
 
 export interface SocietyMembership {
@@ -139,6 +141,7 @@ export interface AuthContextType {
   setActiveMembership: (membership: SocietyMembership) => void;
   switchRole: (role: UserRole) => void;
   loginWithDemoRole: (role: UserRole) => void;
+  loginWithDemoSession?: (profile: UserProfile) => void;
   refreshUserProfile: () => Promise<void>;
   logout: () => Promise<void>;
 }

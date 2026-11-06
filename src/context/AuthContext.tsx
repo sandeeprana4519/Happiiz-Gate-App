@@ -126,6 +126,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (currentFbUser) {
         await loadUserData(currentFbUser.uid, currentFbUser);
       } else {
+        // Check if an active demo session exists in localStorage
+        try {
+          const savedDemo = localStorage.getItem(DEMO_USER_SESSION_KEY);
+          if (savedDemo) {
+            const parsed = JSON.parse(savedDemo) as UserProfile;
+            setUser(parsed);
+            const role = parsed.primaryRole || 'RESIDENT';
+            const sampleMems = MOCK_MEMBERSHIPS[role] || [];
+            setMemberships(sampleMems);
+            setActiveMembershipState(sampleMems[0] || null);
+            setLoading(false);
+            return;
+          }
+        } catch (_) {}
         setUser(null);
         setMemberships([]);
         setActiveMembershipState(null);
@@ -173,13 +187,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const loginWithDemoRole = (role: UserRole) => {
-    const demoUser = MOCK_USERS[role] || MOCK_USERS['RESIDENT'];
+    let demoUser = MOCK_USERS[role] || MOCK_USERS['RESIDENT'];
+    try {
+      const saved = localStorage.getItem(DEMO_USER_SESSION_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved) as UserProfile;
+        demoUser = { ...demoUser, ...parsed, primaryRole: role, role };
+      }
+    } catch (_) {}
     setUser(demoUser);
     const sampleMems = MOCK_MEMBERSHIPS[role] || [];
     setMemberships(sampleMems);
     setActiveMembershipState(sampleMems[0] || null);
     try {
       localStorage.setItem(DEMO_USER_SESSION_KEY, JSON.stringify(demoUser));
+    } catch (e) {
+      console.warn('Error saving demo session:', e);
+    }
+  };
+
+  const loginWithDemoSession = (profile: UserProfile) => {
+    setUser(profile);
+    const role = profile.primaryRole || 'RESIDENT';
+    const sampleMems = profile.onboardingCompleted ? (MOCK_MEMBERSHIPS[role] || []) : [];
+    setMemberships(sampleMems);
+    setActiveMembershipState(sampleMems[0] || null);
+    try {
+      localStorage.setItem(DEMO_USER_SESSION_KEY, JSON.stringify(profile));
     } catch (e) {
       console.warn('Error saving demo session:', e);
     }
@@ -228,6 +262,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setActiveMembership,
         switchRole,
         loginWithDemoRole,
+        loginWithDemoSession,
         refreshUserProfile,
         logout,
       }}

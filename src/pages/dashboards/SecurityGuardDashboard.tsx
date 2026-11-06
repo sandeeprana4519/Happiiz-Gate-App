@@ -3,178 +3,338 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import { GuardHeader } from '../../components/layout/GuardHeader';
 import { GuardTopNav, GuardNavTab } from '../../components/layout/GuardTopNav';
 import { VisitorCodeInput } from '../../components/common/VisitorCodeInput';
+import { Modal } from '../../components/common/Modal';
 import { NumericKeypad } from '../../components/common/NumericKeypad';
 import { VisitorCategoryCard } from '../../components/common/VisitorCategoryCard';
 import { GuestIllustration3D } from '../../components/illustrations/GuestIllustration3D';
 import { DeliveryIllustration3D } from '../../components/illustrations/DeliveryIllustration3D';
 import { ServiceIllustration3D } from '../../components/illustrations/ServiceIllustration3D';
 import { CabIllustration3D } from '../../components/illustrations/CabIllustration3D';
-import { VisitorEntryModal, VisitorCategory } from '../../components/common/VisitorEntryModal';
-import { QRScannerModal } from '../../components/common/QRScannerModal';
-import { Modal } from '../../components/common/Modal';
-import { MOCK_GATE_PASSES } from '../../services/mock/mockData';
-import { GatePass } from '../../types/society';
+import { GuardOfflineBanner } from '../../components/guard/GuardOfflineBanner';
+import { GuardBottomNav, GuardBottomTab } from '../../components/guard/GuardBottomNav';
+import { GuardVisitorEntryModal } from '../../components/guard/GuardVisitorEntryModal';
+import { GuardQRScannerModal } from '../../components/guard/GuardQRScannerModal';
+import { GuardWaitingView } from '../../components/guard/GuardWaitingView';
+import { GuardInsideView } from '../../components/guard/GuardInsideView';
+import { GuardDirectoryView } from '../../components/guard/GuardDirectoryView';
+import { GuardAlertsAndProfileView } from '../../components/guard/GuardAlertsAndProfileView';
+import { guardService } from '../../services/firebase/guard.service';
+import { syncBus } from '../../services/firebase/sync.service';
+import { soundAlert } from '../../utils/soundAlert';
+import { 
+  GuardVisitor, 
+  GuardKPIStats, 
+  VisitorCategoryType, 
+  ResidentMessageToGuard, 
+  GuardEmergencyAlert, 
+  GuardResidentDirectoryItem,
+  GuardProfileInfo 
+} from '../../types/guard';
 import {
-  CheckCircle2,
   Clock,
-  LogOut,
-  Search,
+  ShieldCheck,
   AlertTriangle,
-  ArrowDownUp,
+  LogOut,
   UserCheck,
-  ShieldAlert,
+  Car,
+  Truck,
+  Phone,
+  CheckCircle2,
+  XCircle,
+  Sparkles,
+  Layers,
+  ArrowRight
 } from 'lucide-react';
 
 export const SecurityGuardDashboard: React.FC = () => {
-  const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<GuardNavTab>('home');
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  // Guard Terminal Identity & Assigned Gate
   const [activeGate, setActiveGate] = useState('Gate A, West Corner');
+  const societyId = user?.societyId || 'soc_emerald_heights';
+  const guardProfile: GuardProfileInfo = guardService.getGuardSession(user);
 
-  // Keypad State
+  // Active Navigation Tab: 'home' | 'waiting' | 'inside' | 'directory' | 'alerts'
+  const [activeTab, setActiveTab] = useState<GuardBottomTab>('home');
+
+  // Keypad & Pass Verification State
   const [enteredCode, setEnteredCode] = useState('');
-  const [verifiedPass, setVerifiedPass] = useState<GatePass | null>(null);
+  const [keypadError, setKeypadError] = useState<string | null>(null);
+  const [verifiedVisitor, setVerifiedVisitor] = useState<GuardVisitor | null>(null);
   const [showVerifyModal, setShowVerifyModal] = useState(false);
+  const [verifyingCode, setVerifyingCode] = useState(false);
 
-  // QR Scanner Modal State
+  // Modals
   const [showQrModal, setShowQrModal] = useState(false);
+  const [selectedVisitorCategory, setSelectedVisitorCategory] = useState<VisitorCategoryType | null>(null);
 
-  // New Visitor Modal State
-  const [selectedVisitorCategory, setSelectedVisitorCategory] = useState<VisitorCategory | null>(null);
+  // Data Store
+  const [visitors, setVisitors] = useState<GuardVisitor[]>([]);
+  const [kpiStats, setKpiStats] = useState<GuardKPIStats | null>(null);
+  const [messages, setMessages] = useState<ResidentMessageToGuard[]>([]);
+  const [emergencies, setEmergencies] = useState<GuardEmergencyAlert[]>([]);
+  const [directory, setDirectory] = useState<GuardResidentDirectoryItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Passes Data
-  const [passes, setPasses] = useState<GatePass[]>(MOCK_GATE_PASSES);
+  // Fetch all live guard station data
+  const loadData = useCallback(async () => {
+    try {
+      const [vList, stats, msgList, emgList, dirList] = await Promise.all([
+        guardService.getAllVisitors(societyId),
+        guardService.getGuardKPIStats(societyId, 'gate_1'),
+        guardService.getResidentMessages(societyId),
+        guardService.getEmergencyAlerts(societyId),
+        guardService.getResidentDirectory(societyId),
+      ]);
+      setVisitors(vList);
+      setKpiStats(stats);
+      setMessages(msgList);
+      setEmergencies(emgList);
+      setDirectory(dirList);
+    } catch (err) {
+      console.error('[GuardDashboard] Failed to fetch live data:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [societyId]);
 
-  // Keypad Handlers
+  useEffect(() => {
+    loadData();
+    // Real-time sync bus subscription for instant cross-tab / cross-window updates
+    const unsubscribeSync = syncBus.subscribeAll((event) => {
+      if (event.societyId === societyId || event.societyId === 'all') {
+        loadData();
+      }
+    });
+
+    // Real-time polling fallback interval
+    const interval = setInterval(() => {
+      loadData();
+    }, 8000);
+
+    return () => {
+      clearInterval(interval);
+      unsubscribeSync();
+    };
+  }, [loadData, societyId]);
+
+  // Handle keypad digit input
   const handleDigitPress = (digit: string) => {
+    setKeypadError(null);
     if (enteredCode.length < 6) {
       const nextCode = enteredCode + digit;
       setEnteredCode(nextCode);
 
       if (nextCode.length === 6) {
-        // Automatic verification on 6 digits
-        verifyCode(nextCode);
+        handleVerifyCode(nextCode);
       }
     }
   };
 
   const handleDeletePress = () => {
+    setKeypadError(null);
     setEnteredCode((prev) => prev.slice(0, -1));
   };
 
-  const verifyCode = (codeToVerify: string) => {
-    const found = passes.find(
-      (p) => p.passCode === codeToVerify || p.id.toLowerCase().includes(codeToVerify.toLowerCase())
-    );
-
-    if (found) {
-      setVerifiedPass(found);
-      setShowVerifyModal(true);
-    } else {
-      // Create a fallback verified mock pass for demonstration
-      const mockPass: GatePass = {
-        id: `PASS-${codeToVerify}`,
-        visitorName: 'Rajesh Sharma (Verified Guest)',
-        visitorPhone: '+91 98210 33411',
-        visitorType: 'Guest',
-        hostFlat: 'B-704',
-        hostResidentName: 'Dr. Priya Varma',
-        entryGate: activeGate,
-        passCode: codeToVerify,
-        status: 'Approved',
-        purpose: 'Social Visit',
-      };
-      setVerifiedPass(mockPass);
-      setShowVerifyModal(true);
+  const handleVerifyCode = async (codeToVerify: string) => {
+    setVerifyingCode(true);
+    setKeypadError(null);
+    try {
+      const result = await guardService.verifyVisitorOtp(societyId, codeToVerify);
+      if (result.success && result.visitor) {
+        soundAlert.playApprovalChime();
+        setVerifiedVisitor(result.visitor);
+        setShowVerifyModal(true);
+      } else {
+        setKeypadError(result.message);
+      }
+    } catch (err: any) {
+      setKeypadError(err?.message || 'Verification failed. Please retry.');
+    } finally {
+      setVerifyingCode(false);
     }
   };
 
-  const handleApproveEntry = () => {
-    if (verifiedPass) {
-      const updated = {
-        ...verifiedPass,
-        status: 'CheckedIn' as const,
-        checkInTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      };
-      setPasses([updated, ...passes.filter((p) => p.id !== updated.id)]);
+  // Grant entry & open barrier
+  const handleApproveEntry = async () => {
+    if (!verifiedVisitor) return;
+    try {
+      await guardService.grantVisitorEntry(societyId, verifiedVisitor.id, guardProfile.fullName);
+      soundAlert.playApprovalChime();
       setShowVerifyModal(false);
-      setVerifiedPass(null);
+      setVerifiedVisitor(null);
       setEnteredCode('');
-      alert(`Entry granted to ${updated.visitorName} for Flat ${updated.hostFlat}.`);
+      await loadData();
+    } catch (err: any) {
+      alert(err.message || 'Failed to grant clearance.');
     }
   };
 
-  const handleCheckOut = (passId: string) => {
-    setPasses((prev) =>
-      prev.map((p) =>
-        p.id === passId
-          ? {
-              ...p,
-              status: 'CheckedOut',
-              checkOutTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            }
-          : p
-      )
+  // Handle new visitor submission from category modal
+  const handleNewVisitorSubmit = async (data: any) => {
+    try {
+      await guardService.createVisitorEntry(societyId, activeGate, guardProfile.fullName, {
+        category: data.category,
+        visitorName: data.visitorName,
+        visitorPhone: data.visitorPhone,
+        building: data.building,
+        flatNumber: data.flatNumber,
+        numberOfVisitors: data.numberOfVisitors,
+        purpose: data.purpose,
+        photoUrl: data.photoUrl,
+        deliveryCompany: data.deliveryCompany,
+        deliveryType: data.deliveryType,
+        packageDescription: data.packageDescription,
+        serviceCompany: data.serviceCompany,
+        serviceCategory: data.serviceCategory,
+        cabCompany: data.cabCompany,
+        cabVehiclePlate: data.cabVehiclePlate,
+        cabPassengers: data.cabPassengers,
+        autoApprove: data.category === 'Cab',
+      });
+      setSelectedVisitorCategory(null);
+      await loadData();
+      soundAlert.playApprovalChime();
+    } catch (err: any) {
+      alert('Error creating visitor entry: ' + (err.message || 'Unknown error'));
+    }
+  };
+
+  // Action handlers
+  const handleAllowEntryDirect = async (visitorId: string) => {
+    await guardService.grantVisitorEntry(societyId, visitorId, guardProfile.fullName);
+    soundAlert.playApprovalChime();
+    await loadData();
+  };
+
+  const handleSimulateDecision = async (visitorId: string, action: 'APPROVE' | 'DENY') => {
+    await guardService.simulateResidentResponse(societyId, visitorId, action);
+    await loadData();
+  };
+
+  const handleAdminOverride = async (visitorId: string, reason: string) => {
+    await guardService.adminOverrideApproval(
+      societyId,
+      visitorId,
+      reason,
+      `${guardProfile.fullName} (Supervisor Override)`
     );
+    soundAlert.playApprovalChime();
+    await loadData();
   };
 
-  const handleNewVisitorSubmit = (data: any) => {
-    const newPass: GatePass = {
-      id: `PASS-${data.passCode}`,
-      visitorName: data.visitorName || data.category,
-      visitorPhone: data.mobileNumber || '+91 90000 00000',
-      visitorType: data.category,
-      hostFlat: `${data.wing}-${data.flatNumber}`,
-      hostResidentName: `Resident of Flat ${data.flatNumber}`,
-      entryGate: activeGate,
-      checkInTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      passCode: data.passCode,
-      status: 'CheckedIn',
-      purpose: `${data.category} Entry Check-in`,
-    };
-    setPasses([newPass, ...passes]);
+  const handleCheckOut = async (visitorId: string, exitGate: string, guardName: string) => {
+    await guardService.checkOutVisitor(societyId, visitorId, exitGate, guardName);
+    soundAlert.playApprovalChime();
+    await loadData();
   };
 
-  const insideVisitors = passes.filter((p) => p.status === 'CheckedIn');
+  const handleAcknowledgeEmergency = async (alertId: string) => {
+    await guardService.acknowledgeEmergencyAlert(societyId, alertId, guardProfile.fullName);
+    await loadData();
+  };
+
+  const handleResolveEmergency = async (alertId: string, notes: string) => {
+    await guardService.resolveEmergencyAlert(societyId, alertId, notes);
+    await loadData();
+  };
+
+  const handleFastTrackCheckIn = async (visitorId: string) => {
+    await guardService.grantVisitorEntry(societyId, visitorId, guardProfile.fullName);
+    soundAlert.playApprovalChime();
+    await loadData();
+  };
+
+  const handleMarkMessageRead = async (messageId: string) => {
+    await guardService.markMessageAsRead(societyId, messageId);
+    await loadData();
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
+  };
+
+  // Map top nav tabs to bottom nav views
+  const handleTopNavChange = (tab: GuardNavTab) => {
+    if (tab === 'home') setActiveTab('home');
+    else if (tab === 'inout') setActiveTab('inside');
+    else if (tab === 'message') setActiveTab('directory');
+  };
+
+  const waitingVisitorsCount = visitors.filter((v) => v.status === 'WAITING_APPROVAL').length;
+  const insideVisitorsCount = visitors.filter((v) => v.status === 'INSIDE').length;
+  const activeEmergenciesCount = emergencies.filter((e) => e.status !== 'RESOLVED').length;
+  const unreadMessagesCount = messages.filter((m) => !m.isRead).length;
 
   return (
-    <div className="min-h-screen bg-[#FFFFFF] text-[#111111] pb-12 select-none">
-      {/* 1. BLACK HEADER (Gate Name + Options) */}
+    <div className="min-h-screen bg-[#FFFFFF] text-[#111111] pb-24 select-none relative font-sans antialiased">
+      {/* 1. STICKY OFFLINE BANNER */}
+      <GuardOfflineBanner />
+
+      {/* 2. BLACK HEADER (Gate Name + Switch Gate / Handover Menu) */}
       <GuardHeader gateName={activeGate} onSelectGate={(g) => setActiveGate(g)} />
 
-      {/* 2. TOP NAVIGATION (Home, In-Out, Message) */}
+      {/* 3. TOP NAVIGATION (Home, In-Out, Message matching Reference Screenshot 2) */}
       <GuardTopNav
-        activeTab={activeTab}
-        onTabChange={(tab) => setActiveTab(tab)}
-        inOutCount={insideVisitors.length}
+        activeTab={activeTab === 'home' ? 'home' : activeTab === 'inside' ? 'inout' : 'message'}
+        onTabChange={handleTopNavChange}
+        inOutCount={insideVisitorsCount}
+        unreadMessagesCount={unreadMessagesCount}
       />
 
       <main className="max-w-lg mx-auto">
+        {/* ======================================================== */}
         {/* TAB 1: HOME (Exact Recreation of Reference Screenshot 2) */}
+        {/* ======================================================== */}
         {activeTab === 'home' && (
-          <div className="space-y-6 pt-1">
-            {/* 3. SIX-DIGIT VISITOR CODE BOX (Light-blue card overlapping seam) */}
+          <div className="space-y-4 pt-1 animate-fade-in">
+            {/* SIX-DIGIT VISITOR CODE BOX */}
             <VisitorCodeInput code={enteredCode} length={6} />
 
-            {/* 4. NUMERIC KEYPAD (3 Columns: 1-9, QR in Purple, 0, Delete) */}
+            {/* Error / Rate Limiting Alert */}
+            {keypadError && (
+              <div className="mx-6 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600" />
+                <span>{keypadError}</span>
+              </div>
+            )}
+
+            {verifyingCode && (
+              <div className="text-center text-xs font-bold text-[#673AB7] flex items-center justify-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-[#673AB7] animate-ping" />
+                Verifying digital gate code...
+              </div>
+            )}
+
+            {/* NUMERIC KEYPAD (3 Columns: 1-9, QR in Purple, 0, Delete) */}
             <NumericKeypad
               onDigitPress={handleDigitPress}
               onDeletePress={handleDeletePress}
               onQrPress={() => setShowQrModal(true)}
+              disabled={verifyingCode}
             />
 
-            {/* 5. ADD NEW VISITOR SECTION */}
-            <section className="px-5 pt-2 space-y-3">
-              <h2 className="text-sm sm:text-base font-extrabold text-[#111111] tracking-wider uppercase text-center sm:text-left">
-                ADD NEW VISITOR
-              </h2>
+            {/* ADD NEW VISITOR SECTION (Horizontal scrollable cards with 3D figures) */}
+            <section className="px-5 pt-1 space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-extrabold text-[#111111] tracking-wider uppercase">
+                  ADD NEW VISITOR
+                </h2>
+                <span className="text-[11px] font-bold text-[#673AB7] hover:underline cursor-pointer">
+                  Fast Register
+                </span>
+              </div>
 
-              {/* Horizontal Scrollable Cards */}
-              <div className="flex gap-3 overflow-x-auto no-scrollbar pb-3 -mx-4 px-4 sm:mx-0 sm:px-0">
+              {/* Horizontal Scrollable Category Cards matching Screenshot 2 */}
+              <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2 -mx-4 px-4 sm:mx-0 sm:px-0">
                 <VisitorCategoryCard
                   title="Guest"
                   illustration={<GuestIllustration3D size={105} />}
@@ -197,143 +357,200 @@ export const SecurityGuardDashboard: React.FC = () => {
                 />
               </div>
             </section>
-          </div>
-        )}
 
-        {/* TAB 2: IN-OUT (Inside Visitors & Exit Checkout) */}
-        {activeTab === 'inout' && (
-          <div className="px-4 sm:px-6 pt-5 space-y-4 animate-fade-in">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg sm:text-xl font-bold text-[#111111]">
-                  Inside Visitors & Vehicles
-                </h2>
-                <p className="text-xs text-[#A9B0B8]">
-                  {insideVisitors.length} active visitors currently inside
-                </p>
-              </div>
-              <span className="px-3 py-1 rounded-full bg-[#F1F9FC] border border-[#E6F1F5] text-xs font-bold text-[#673AB7]">
-                {insideVisitors.length} Inside
-              </span>
-            </div>
-
-            <div className="space-y-2.5">
-              {insideVisitors.length === 0 ? (
-                <div className="p-8 text-center rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] text-xs text-[#A9B0B8]">
-                  No visitors currently inside society premises.
-                </div>
-              ) : (
-                insideVisitors.map((p) => (
+            {/* LIVE KPI METRICS TICKER */}
+            {kpiStats && (
+              <section className="px-5 pt-2 pb-4 space-y-2">
+                <h3 className="text-xs font-bold text-[#A9B0B8] uppercase tracking-wider">
+                  Gate Station Overview
+                </h3>
+                <div className="grid grid-cols-3 gap-2.5">
                   <div
-                    key={p.id}
-                    className="p-4 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] flex items-center justify-between"
+                    onClick={() => setActiveTab('waiting')}
+                    className="p-3 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] text-center cursor-pointer hover:border-[#673AB7] transition-all"
                   >
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <h4 className="font-bold text-sm text-[#111111]">{p.visitorName}</h4>
-                        <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-white text-[#673AB7] border border-[#E6F1F5]">
-                          {p.visitorType}
-                        </span>
-                      </div>
-                      <p className="text-xs text-[#64748B]">
-                        To Flat <strong className="text-[#111111]">{p.hostFlat}</strong> ({p.hostResidentName})
-                      </p>
-                      <p className="text-[11px] text-[#A9B0B8] flex items-center gap-1 font-mono">
-                        <Clock className="w-3 h-3" />
-                        <span>Entered at {p.checkInTime || '10:30 AM'} via {p.entryGate}</span>
-                      </p>
-                    </div>
-
-                    <button
-                      onClick={() => handleCheckOut(p.id)}
-                      className="px-3 py-1.5 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 transition-colors cursor-pointer flex items-center gap-1"
-                    >
-                      <LogOut className="w-3.5 h-3.5" />
-                      <span>Check Out</span>
-                    </button>
+                    <p className="text-xl font-extrabold text-amber-600">
+                      {kpiStats.waitingApproval}
+                    </p>
+                    <p className="text-[10px] font-bold text-[#64748B] mt-0.5">Waiting Queue</p>
                   </div>
-                ))
-              )}
-            </div>
+                  <div
+                    onClick={() => setActiveTab('inside')}
+                    className="p-3 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] text-center cursor-pointer hover:border-[#673AB7] transition-all"
+                  >
+                    <p className="text-xl font-extrabold text-[#673AB7]">
+                      {kpiStats.visitorsInside}
+                    </p>
+                    <p className="text-[10px] font-bold text-[#64748B] mt-0.5">Inside Campus</p>
+                  </div>
+                  <div
+                    onClick={() => setActiveTab('alerts')}
+                    className="p-3 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] text-center cursor-pointer hover:border-[#673AB7] transition-all"
+                  >
+                    <p className="text-xl font-extrabold text-emerald-600">
+                      {kpiStats.preApprovedCount}
+                    </p>
+                    <p className="text-[10px] font-bold text-[#64748B] mt-0.5">Pre-Approved</p>
+                  </div>
+                </div>
+              </section>
+            )}
           </div>
         )}
 
-        {/* TAB 3: MESSAGE (Intercom, Society Broadcasts & SOS Alerts) */}
-        {activeTab === 'message' && (
-          <div className="px-4 sm:px-6 pt-5 space-y-4 animate-fade-in">
-            <div>
-              <h2 className="text-lg sm:text-xl font-bold text-[#111111]">
-                Gate Intercom & Broadcasts
-              </h2>
-              <p className="text-xs text-[#A9B0B8]">
-                Real-time communications from Society Office & Residents
-              </p>
-            </div>
+        {/* ======================================================== */}
+        {/* TAB 2: WAITING (Live Approval Queue & Resident Decision) */}
+        {/* ======================================================== */}
+        {activeTab === 'waiting' && (
+          <div className="px-4 sm:px-6 pt-4 animate-fade-in">
+            <GuardWaitingView
+              visitors={visitors}
+              onAllowEntry={handleAllowEntryDirect}
+              onSimulateDecision={handleSimulateDecision}
+              onAdminOverride={handleAdminOverride}
+              onRefresh={loadData}
+            />
+          </div>
+        )}
 
-            <div className="space-y-3">
-              <div className="p-4 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-xs text-[#673AB7]">Society Admin Notice</span>
-                  <span className="text-[10px] text-[#A9B0B8]">15m ago</span>
-                </div>
-                <p className="text-xs text-[#111111] font-semibold">
-                  Heavy Vehicle Restrictions between 4 PM – 7 PM
-                </p>
-                <p className="text-xs text-[#64748B]">
-                  Diverting all cement mixers and large shifting trucks to South Gate #3 during school bus arrival hours.
-                </p>
-              </div>
+        {/* ======================================================== */}
+        {/* TAB 3: INSIDE (Inside Visitors & Exit Check-Out) */}
+        {/* ======================================================== */}
+        {activeTab === 'inside' && (
+          <div className="px-4 sm:px-6 pt-4 animate-fade-in">
+            <GuardInsideView
+              visitors={visitors}
+              activeGate={activeGate}
+              guardName={guardProfile.fullName}
+              onCheckOut={handleCheckOut}
+              onRefresh={loadData}
+            />
+          </div>
+        )}
 
-              <div className="p-4 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-xs text-[#111111]">Flat B-704 (Dr. Priya Varma)</span>
-                  <span className="text-[10px] text-[#A9B0B8]">1 hour ago</span>
-                </div>
-                <p className="text-xs text-[#111111] font-semibold">
-                  Expecting Amazon delivery package
-                </p>
-                <p className="text-xs text-[#64748B]">
-                  Pre-approved delivery pass code #310928 issued. Please clear delivery agent at gate.
-                </p>
-              </div>
-            </div>
+        {/* ======================================================== */}
+        {/* TAB 4: DIRECTORY & MESSAGES (Safe Resident Phonebook) */}
+        {/* ======================================================== */}
+        {activeTab === 'directory' && (
+          <div className="px-4 sm:px-6 pt-4 animate-fade-in">
+            <GuardDirectoryView
+              directory={directory}
+              messages={messages}
+              onMarkMessageRead={handleMarkMessageRead}
+            />
+          </div>
+        )}
+
+        {/* ======================================================== */}
+        {/* TAB 5: SOS ALERTS, PRE-APPROVED, HISTORY & PROFILE */}
+        {/* ======================================================== */}
+        {activeTab === 'alerts' && (
+          <div className="px-4 sm:px-6 pt-4 animate-fade-in">
+            <GuardAlertsAndProfileView
+              emergencies={emergencies}
+              visitors={visitors}
+              guardProfile={guardProfile}
+              onAcknowledgeEmergency={handleAcknowledgeEmergency}
+              onResolveEmergency={handleResolveEmergency}
+              onFastTrackCheckIn={handleFastTrackCheckIn}
+              onLogout={handleLogout}
+            />
           </div>
         )}
       </main>
 
-      {/* VERIFY PASS MODAL */}
+      {/* ======================================================== */}
+      {/* 4. MOBILE BOTTOM NAVIGATION (5 TABS + FLOATING QR SCANNER) */}
+      {/* ======================================================== */}
+      <GuardBottomNav
+        activeTab={activeTab}
+        onTabChange={(tab) => setActiveTab(tab)}
+        waitingCount={waitingVisitorsCount}
+        insideCount={insideVisitorsCount}
+        activeEmergenciesCount={activeEmergenciesCount}
+        onQrPress={() => setShowQrModal(true)}
+      />
+
+      {/* ======================================================== */}
+      {/* 5. VERIFIED PASS CLEARANCE MODAL */}
+      {/* ======================================================== */}
       <Modal
         isOpen={showVerifyModal}
         onClose={() => {
           setShowVerifyModal(false);
-          setVerifiedPass(null);
+          setVerifiedVisitor(null);
           setEnteredCode('');
         }}
         title="Visitor Pass Verification"
-        description="Verify pass details before granting gate clearance"
+        description="Verify visitor credentials before raising gate barrier"
         maxWidth="sm"
       >
-        {verifiedPass && (
+        {verifiedVisitor && (
           <div className="space-y-4 pt-1">
-            <div className="p-4 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] space-y-2">
+            <div className="p-4 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-[#A9B0B8] uppercase">Code #{verifiedPass.passCode}</span>
-                <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold">
-                  {verifiedPass.status}
+                <span className="text-xs font-bold text-[#A9B0B8] uppercase">
+                  Pass Code #{verifiedVisitor.passCode}
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" />
+                  {verifiedVisitor.status}
                 </span>
               </div>
-              <h3 className="text-base font-extrabold text-[#111111]">
-                {verifiedPass.visitorName}
-              </h3>
-              <p className="text-xs text-[#64748B]">
-                Destination: <strong className="text-[#111111]">Flat {verifiedPass.hostFlat}</strong> ({verifiedPass.hostResidentName})
-              </p>
-              <p className="text-xs text-[#64748B]">
-                Visitor Contact: <strong className="text-[#111111]">{verifiedPass.visitorPhone}</strong>
-              </p>
-              <p className="text-xs text-[#64748B]">
-                Purpose: <strong className="text-[#111111]">{verifiedPass.purpose}</strong>
-              </p>
+
+              <div className="flex items-center gap-3">
+                {verifiedVisitor.photoUrl ? (
+                  <img
+                    src={verifiedVisitor.photoUrl}
+                    alt={verifiedVisitor.visitorName}
+                    className="w-14 h-14 rounded-2xl object-cover border border-[#E6F1F5] shrink-0"
+                  />
+                ) : (
+                  <div className="w-14 h-14 rounded-2xl bg-white border border-[#E6F1F5] flex items-center justify-center font-bold text-lg text-[#673AB7] shrink-0">
+                    {verifiedVisitor.visitorName.charAt(0)}
+                  </div>
+                )}
+                <div>
+                  <h3 className="text-base font-extrabold text-[#111111]">
+                    {verifiedVisitor.visitorName}
+                  </h3>
+                  <span className="inline-block text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-white text-[#673AB7] border border-[#E6F1F5] mt-0.5">
+                    {verifiedVisitor.category}
+                  </span>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-[#E6F1F5] space-y-1 text-xs">
+                <p className="text-[#64748B]">
+                  Destination:{' '}
+                  <strong className="text-[#111111]">
+                    {verifiedVisitor.building} - Flat {verifiedVisitor.flatNumber}
+                  </strong>
+                </p>
+                {verifiedVisitor.residentName && (
+                  <p className="text-[#64748B]">
+                    Host Resident: <strong className="text-[#111111]">{verifiedVisitor.residentName}</strong>
+                  </p>
+                )}
+                {verifiedVisitor.visitorPhone && (
+                  <p className="text-[#64748B]">
+                    Visitor Phone: <strong className="text-[#111111]">{verifiedVisitor.visitorPhone}</strong>
+                  </p>
+                )}
+                {verifiedVisitor.cabVehiclePlate && (
+                  <p className="text-[#64748B]">
+                    Vehicle Plate: <strong className="text-[#111111]">{verifiedVisitor.cabVehiclePlate}</strong>
+                  </p>
+                )}
+                {verifiedVisitor.deliveryCompany && (
+                  <p className="text-[#64748B]">
+                    Delivery: <strong className="text-[#111111]">{verifiedVisitor.deliveryCompany}</strong>
+                  </p>
+                )}
+                <p className="text-[#64748B]">
+                  Purpose: <strong className="text-[#111111]">{verifiedVisitor.purpose}</strong>
+                </p>
+              </div>
             </div>
 
             <div className="flex gap-2">
@@ -341,43 +558,49 @@ export const SecurityGuardDashboard: React.FC = () => {
                 type="button"
                 onClick={() => {
                   setShowVerifyModal(false);
-                  setVerifiedPass(null);
+                  setVerifiedVisitor(null);
                   setEnteredCode('');
                 }}
-                className="flex-1 py-2.5 rounded-xl border border-[#E6F1F5] text-xs font-bold text-[#64748B] hover:bg-slate-100 transition-colors cursor-pointer"
+                className="flex-1 py-3 rounded-xl border border-[#E6F1F5] text-xs font-bold text-[#64748B] hover:bg-slate-100 transition-colors cursor-pointer"
               >
-                Deny / Cancel
+                Cancel
               </button>
               <button
                 type="button"
                 onClick={handleApproveEntry}
-                className="flex-1 py-2.5 rounded-xl bg-[#673AB7] text-white text-xs font-bold hover:bg-[#512DA8] transition-colors cursor-pointer"
+                className="flex-1 py-3 rounded-xl bg-[#673AB7] text-white text-xs font-bold hover:bg-[#512DA8] shadow-[0_4px_12px_rgba(103,58,183,0.35)] transition-all cursor-pointer flex items-center justify-center gap-1.5"
               >
-                Grant Entry & Check In
+                <ShieldCheck className="w-4 h-4" />
+                <span>Grant Entry & Open Barrier</span>
               </button>
             </div>
           </div>
         )}
       </Modal>
 
-      {/* QR SCANNER MODAL */}
-      <QRScannerModal
+      {/* ======================================================== */}
+      {/* 6. QR SCANNER MODAL */}
+      {/* ======================================================== */}
+      <GuardQRScannerModal
         isOpen={showQrModal}
         onClose={() => setShowQrModal(false)}
-        onScanSuccess={(code) => {
+        onVerifyToken={(token) => guardService.verifyQrToken(societyId, token)}
+        onAllowEntry={async (visitorId) => {
+          await handleAllowEntryDirect(visitorId);
           setShowQrModal(false);
-          verifyCode(code);
         }}
       />
 
-      {/* NEW VISITOR MODAL (Guest, Delivery, Service, Cab) */}
+      {/* ======================================================== */}
+      {/* 7. VISITOR REGISTRATION MODAL (Guest, Delivery, Service, Cab) */}
+      {/* ======================================================== */}
       {selectedVisitorCategory && (
-        <VisitorEntryModal
+        <GuardVisitorEntryModal
           isOpen={Boolean(selectedVisitorCategory)}
           onClose={() => setSelectedVisitorCategory(null)}
-          category={selectedVisitorCategory}
+          initialCategory={selectedVisitorCategory}
           onSubmit={handleNewVisitorSubmit}
-          isGuardView={true}
+          societyBuildings={['Tower A', 'Tower B', 'Tower C', 'Wing D']}
         />
       )}
     </div>

@@ -6,7 +6,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { GlassCard } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { Society } from '../../types/society';
@@ -25,6 +24,8 @@ import {
   ChevronLeft,
   AlertCircle,
   ShieldCheck,
+  Search,
+  Check,
 } from 'lucide-react';
 
 export const ResidentRegistration: React.FC = () => {
@@ -32,6 +33,7 @@ export const ResidentRegistration: React.FC = () => {
   const navigate = useNavigate();
 
   const [societies, setSocieties] = useState<Society[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [selectedSocietyId, setSelectedSocietyId] = useState('');
   const [wingId, setWingId] = useState('Tower B');
   const [flatId, setFlatId] = useState('');
@@ -52,6 +54,13 @@ export const ResidentRegistration: React.FC = () => {
     load();
   }, []);
 
+  const filteredSocieties = societies.filter(
+    (s) =>
+      s.societyName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.city.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.societyCode.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!flatId.trim()) {
@@ -67,7 +76,7 @@ export const ResidentRegistration: React.FC = () => {
 
     setLoading(true);
     try {
-      const requestId = `REQ-${Date.now()}`;
+      const requestId = `REQ-RES-${Date.now()}`;
 
       // 1. Create membership record with status: PENDING
       await addSocietyMembership({
@@ -106,6 +115,7 @@ export const ResidentRegistration: React.FC = () => {
       // 3. Update user profile onboarding state
       await updateFirestoreUserProfile(user.uid, {
         primaryRole: 'RESIDENT',
+        role: 'RESIDENT',
         accountStatus: 'PENDING',
         onboardingCompleted: true,
       });
@@ -119,58 +129,94 @@ export const ResidentRegistration: React.FC = () => {
     }
   };
 
+  const selectedSociety = societies.find((s) => s.id === selectedSocietyId);
+
   return (
     <div className="max-w-xl mx-auto py-6 sm:py-10 space-y-6 px-2">
       <Link
         to="/onboarding"
-        className="inline-flex items-center gap-1.5 text-xs text-sky-500 font-semibold hover:text-sky-400"
+        className="inline-flex items-center gap-1.5 text-xs text-[#673AB7] font-semibold hover:underline"
       >
         <ChevronLeft className="w-4 h-4" /> Back to Role Selection
       </Link>
 
       <div className="space-y-1">
-        <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-          <Home className="w-6 h-6 text-sky-500" />
+        <h1 className="text-2xl font-extrabold text-[#111111] flex items-center gap-2">
+          <Home className="w-6 h-6 text-[#673AB7]" />
           <span>Resident Flat Registration</span>
         </h1>
-        <p className="text-xs text-slate-500 dark:text-slate-400">
-          Request authorized membership for your residential society and flat.
+        <p className="text-xs text-[#A9B0B8]">
+          Apply for resident credentials in your gated community to pre-approve visitors and access amenities.
         </p>
       </div>
 
-      <GlassCard elevated className="border-sky-500/20 p-6 sm:p-8 space-y-6">
+      <div className="w-full rounded-2xl bg-[#FFFFFF] border border-[#E6F1F5] shadow-[0_4px_24px_rgba(0,0,0,0.06)] p-6 sm:p-8 space-y-6">
         {error && (
-          <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-500 font-medium flex items-center gap-2">
+          <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-xs text-[#E53945] font-medium flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{error}</span>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Society Dropdown */}
+        {/* Applicant Verification Summary */}
+        <div className="p-3.5 rounded-xl bg-[#F1F9FC] border border-[#E6F1F5] flex items-center justify-between text-xs">
           <div>
-            <label className="block text-xs font-semibold tracking-wide text-slate-700 dark:text-slate-300 mb-1.5">
+            <span className="text-[#A9B0B8] block text-[10px] font-semibold uppercase">Applicant</span>
+            <span className="font-bold text-[#111111] text-sm">{user?.fullName || 'Resident User'}</span>
+          </div>
+          <div className="text-right">
+            <span className="text-[#A9B0B8] block text-[10px] font-semibold uppercase">Verified Mobile</span>
+            <span className="font-mono font-bold text-[#673AB7]">{user?.phoneNumber || '+91'}</span>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Society Selection with Search */}
+          <div>
+            <label className="block text-xs font-semibold tracking-wide text-[#111111] mb-1.5">
               Select Residential Society / Enclave
             </label>
-            <div className="relative flex items-center">
-              <div className="absolute left-3.5 flex items-center pointer-events-none text-slate-400">
-                <Building className="w-4 h-4" />
+            <div className="space-y-2">
+              <div className="relative flex items-center">
+                <Search className="w-4 h-4 absolute left-3 text-[#A9B0B8]" />
+                <input
+                  type="text"
+                  placeholder="Search society by name or city..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full h-10 rounded-xl pl-9 pr-3 text-xs bg-[#F1F9FC] border border-[#E6F1F5] text-[#111111] outline-none focus:border-[#673AB7]"
+                />
               </div>
-              <select
-                value={selectedSocietyId}
-                onChange={(e) => setSelectedSocietyId(e.target.value)}
-                className="w-full min-h-[44px] h-11 rounded-xl pl-10 pr-3.5 text-xs bg-white/80 dark:bg-slate-900/80 border border-slate-300 dark:border-slate-800 text-slate-900 dark:text-white outline-none focus:border-sky-500"
-                required
-              >
-                {societies.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.societyName} ({s.city}) — Code: {s.societyCode}
-                  </option>
-                ))}
-              </select>
+
+              <div className="max-h-40 overflow-y-auto space-y-1.5 pr-1">
+                {filteredSocieties.map((s) => {
+                  const isSelected = selectedSocietyId === s.id;
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => setSelectedSocietyId(s.id)}
+                      className={`w-full p-2.5 rounded-xl text-left border text-xs transition-all flex items-center justify-between cursor-pointer ${
+                        isSelected
+                          ? 'bg-[#F1F9FC] border-[#673AB7] text-[#111111] font-semibold'
+                          : 'bg-white border-[#E6F1F5] text-[#111111] hover:border-[#673AB7]/40'
+                      }`}
+                    >
+                      <div className="truncate pr-2">
+                        <span>{s.societyName}</span>
+                        <span className="text-[10px] text-[#A9B0B8] block">
+                          {s.city} · Code: {s.societyCode}
+                        </span>
+                      </div>
+                      {isSelected && <Check className="w-4 h-4 text-[#673AB7] shrink-0" />}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
+          {/* Tower & Flat */}
           <div className="grid grid-cols-2 gap-3">
             <Input
               label="Tower / Wing"
@@ -188,8 +234,9 @@ export const ResidentRegistration: React.FC = () => {
             />
           </div>
 
+          {/* Occupancy Status */}
           <div>
-            <label className="block text-xs font-semibold tracking-wide text-slate-700 dark:text-slate-300 mb-1.5">
+            <label className="block text-xs font-semibold tracking-wide text-[#111111] mb-1.5">
               Occupancy Status
             </label>
             <div className="grid grid-cols-2 gap-3">
@@ -200,8 +247,8 @@ export const ResidentRegistration: React.FC = () => {
                   onClick={() => setOccupantType(type)}
                   className={`min-h-[44px] h-11 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
                     occupantType === type
-                      ? 'bg-sky-500/15 border-sky-500 text-sky-400'
-                      : 'bg-white/60 dark:bg-slate-900/60 border-slate-300 dark:border-slate-800 text-slate-600 dark:text-slate-300'
+                      ? 'bg-[#F1F9FC] border-[#673AB7] text-[#673AB7] ring-1 ring-[#673AB7]/30'
+                      : 'bg-white border-[#E6F1F5] text-[#111111] hover:border-[#673AB7]/30'
                   }`}
                 >
                   {type === 'OWNER' ? 'Property Owner' : 'Tenant / Rentee'}
@@ -210,28 +257,30 @@ export const ResidentRegistration: React.FC = () => {
             </div>
           </div>
 
+          {/* Additional Notes */}
           <div>
-            <label className="block text-xs font-semibold tracking-wide text-slate-700 dark:text-slate-300 mb-1.5">
+            <label className="block text-xs font-semibold tracking-wide text-[#111111] mb-1.5">
               Additional Notes (Optional)
             </label>
             <textarea
-              rows={3}
-              placeholder="e.g. Possession date, lease duration, or lease agreement reference"
+              rows={2}
+              placeholder="e.g. Possession date, lease reference, or special gate instructions"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              className="w-full rounded-xl p-3 text-xs bg-white/80 dark:bg-slate-900/80 border border-slate-300 dark:border-slate-800 text-slate-900 dark:text-white outline-none focus:border-sky-500"
+              className="w-full rounded-xl p-3 text-xs bg-[#F1F9FC] border border-[#E6F1F5] text-[#111111] outline-none focus:border-[#673AB7]"
             />
           </div>
 
-          <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400 space-y-1">
-            <div className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-sky-500" />
-              <span>Committee Verification Required</span>
+          {/* Governance Notice */}
+          <div className="p-3.5 rounded-xl bg-[#F5FAFC] border border-[#E6F1F5] text-xs text-[#A9B0B8] space-y-1">
+            <div className="font-semibold text-[#111111] flex items-center gap-1.5">
+              <ShieldCheck className="w-4 h-4 text-[#673AB7]" />
+              <span>Society Committee Approval Required</span>
             </div>
-            <p>
-              Your request will be routed to the verified Managing Committee of{' '}
-              {societies.find((s) => s.id === selectedSocietyId)?.societyName || 'the society'}.
-              Once verified, your Resident Portal privileges will activate automatically.
+            <p className="leading-relaxed">
+              Your request will be submitted to the Managing Committee of{' '}
+              <strong className="text-[#111111]">{selectedSociety?.societyName || 'the society'}</strong>.
+              Upon verification, your Resident Dashboard privileges and Gate Pass approvals will unlock.
             </p>
           </div>
 
@@ -243,10 +292,10 @@ export const ResidentRegistration: React.FC = () => {
             loading={loading}
             rightIcon={<ArrowRight className="w-4 h-4" />}
           >
-            Submit Resident Request
+            Submit Resident Registration
           </Button>
         </form>
-      </GlassCard>
+      </div>
     </div>
   );
 };

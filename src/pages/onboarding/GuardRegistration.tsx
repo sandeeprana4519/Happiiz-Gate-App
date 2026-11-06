@@ -6,7 +6,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { GlassCard } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { Society } from '../../types/society';
@@ -22,8 +21,9 @@ import {
   ArrowRight,
   ChevronLeft,
   AlertCircle,
-  BadgeAlert,
-  IdCard,
+  Search,
+  Check,
+  Lock,
 } from 'lucide-react';
 
 export const GuardRegistration: React.FC = () => {
@@ -31,11 +31,13 @@ export const GuardRegistration: React.FC = () => {
   const navigate = useNavigate();
 
   const [societies, setSocieties] = useState<Society[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [selectedSocietyId, setSelectedSocietyId] = useState('');
   const [employeeId, setEmployeeId] = useState('');
-  const [invitationCode, setInvitationCode] = useState('');
-  const [gateAssigned, setGateAssigned] = useState('Gate #1 (North Main)');
   const [agencyName, setAgencyName] = useState('SIS Security Services');
+  const [gateAssigned, setGateAssigned] = useState('Gate #1 (North Main)');
+  const [shift, setShift] = useState<'DAY' | 'NIGHT' | 'ROTATIONAL'>('DAY');
+  const [invitationCode, setInvitationCode] = useState('');
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,6 +52,13 @@ export const GuardRegistration: React.FC = () => {
     }
     load();
   }, []);
+
+  const filteredSocieties = societies.filter(
+    (s) =>
+      s.societyName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.city.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.societyCode.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,7 +103,7 @@ export const GuardRegistration: React.FC = () => {
         requestData: {
           employmentId: employeeId.trim(),
           gateAssigned,
-          additionalNotes: `Agency: ${agencyName}. Invitation code provided: ${invitationCode || 'None'}.`,
+          additionalNotes: `Agency: ${agencyName}. Shift: ${shift}. Invitation Code: ${invitationCode || 'None'}.`,
         },
         status: 'PENDING',
         submittedAt: new Date().toISOString(),
@@ -103,6 +112,7 @@ export const GuardRegistration: React.FC = () => {
       // 3. Update user profile onboarding state
       await updateFirestoreUserProfile(user.uid, {
         primaryRole: 'SECURITY_GUARD',
+        role: 'SECURITY_GUARD',
         accountStatus: 'PENDING',
         onboardingCompleted: true,
       });
@@ -116,54 +126,85 @@ export const GuardRegistration: React.FC = () => {
     }
   };
 
+  const selectedSociety = societies.find((s) => s.id === selectedSocietyId);
+
   return (
     <div className="max-w-xl mx-auto py-6 sm:py-10 space-y-6 px-2">
       <Link
         to="/onboarding"
-        className="inline-flex items-center gap-1.5 text-xs text-sky-500 font-semibold hover:text-sky-400"
+        className="inline-flex items-center gap-1.5 text-xs text-[#673AB7] font-semibold hover:underline"
       >
         <ChevronLeft className="w-4 h-4" /> Back to Role Selection
       </Link>
 
       <div className="space-y-1">
-        <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-          <ShieldCheck className="w-6 h-6 text-emerald-500" />
+        <h1 className="text-2xl font-extrabold text-[#111111] flex items-center gap-2">
+          <ShieldCheck className="w-6 h-6 text-[#673AB7]" />
           <span>Security Guard Onboarding</span>
         </h1>
-        <p className="text-xs text-slate-500 dark:text-slate-400">
-          Request authorization for gate sentinel terminal credentials.
+        <p className="text-xs text-[#A9B0B8]">
+          Request gate terminal authorization for visitor logging, badge issuance, and parcel scanning.
         </p>
       </div>
 
-      <GlassCard elevated className="border-sky-500/20 p-6 sm:p-8 space-y-6">
+      <div className="w-full rounded-2xl bg-[#FFFFFF] border border-[#E6F1F5] shadow-[0_4px_24px_rgba(0,0,0,0.06)] p-6 sm:p-8 space-y-6">
         {error && (
-          <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-500 font-medium flex items-center gap-2">
+          <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-xs text-[#E53945] font-medium flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{error}</span>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Applicant Verification Summary */}
+        <div className="p-3.5 rounded-xl bg-[#F1F9FC] border border-[#E6F1F5] flex items-center justify-between text-xs">
           <div>
-            <label className="block text-xs font-semibold tracking-wide text-slate-700 dark:text-slate-300 mb-1.5">
+            <span className="text-[#A9B0B8] block text-[10px] font-semibold uppercase">Guard Name</span>
+            <span className="font-bold text-[#111111] text-sm">{user?.fullName || 'Guard Officer'}</span>
+          </div>
+          <div className="text-right">
+            <span className="text-[#A9B0B8] block text-[10px] font-semibold uppercase">Verified Mobile</span>
+            <span className="font-mono font-bold text-[#673AB7]">{user?.phoneNumber || '+91'}</span>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Society Selection with Search */}
+          <div>
+            <label className="block text-xs font-semibold tracking-wide text-[#111111] mb-1.5">
               Assigned Residential Society
             </label>
-            <div className="relative flex items-center">
-              <div className="absolute left-3.5 flex items-center pointer-events-none text-slate-400">
-                <Building className="w-4 h-4" />
+            <div className="space-y-2">
+              <div className="relative flex items-center">
+                <Search className="w-4 h-4 absolute left-3 text-[#A9B0B8]" />
+                <input
+                  type="text"
+                  placeholder="Search society..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full h-10 rounded-xl pl-9 pr-3 text-xs bg-[#F1F9FC] border border-[#E6F1F5] text-[#111111] outline-none focus:border-[#673AB7]"
+                />
               </div>
-              <select
-                value={selectedSocietyId}
-                onChange={(e) => setSelectedSocietyId(e.target.value)}
-                className="w-full min-h-[44px] h-11 rounded-xl pl-10 pr-3.5 text-xs bg-white/80 dark:bg-slate-900/80 border border-slate-300 dark:border-slate-800 text-slate-900 dark:text-white outline-none focus:border-sky-500"
-                required
-              >
-                {societies.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.societyName} ({s.city})
-                  </option>
-                ))}
-              </select>
+
+              <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
+                {filteredSocieties.map((s) => {
+                  const isSelected = selectedSocietyId === s.id;
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => setSelectedSocietyId(s.id)}
+                      className={`w-full p-2.5 rounded-xl text-left border text-xs transition-all flex items-center justify-between cursor-pointer ${
+                        isSelected
+                          ? 'bg-[#F1F9FC] border-[#673AB7] text-[#111111] font-semibold'
+                          : 'bg-white border-[#E6F1F5] text-[#111111] hover:border-[#673AB7]/40'
+                      }`}
+                    >
+                      <span className="truncate pr-2">{s.societyName} ({s.city})</span>
+                      {isSelected && <Check className="w-4 h-4 text-[#673AB7] shrink-0" />}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
@@ -177,43 +218,70 @@ export const GuardRegistration: React.FC = () => {
             />
             <Input
               label="Security Agency / Vendor"
-              placeholder="e.g. SIS, G4S, Apex"
+              placeholder="e.g. SIS, G4S, Tops Security"
               value={agencyName}
               onChange={(e) => setAgencyName(e.target.value)}
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold tracking-wide text-slate-700 dark:text-slate-300 mb-1.5">
-              Preferred Gate Checkpoint
+            <label className="block text-xs font-semibold tracking-wide text-[#111111] mb-1.5">
+              Assigned Gate Checkpoint
             </label>
             <select
               value={gateAssigned}
               onChange={(e) => setGateAssigned(e.target.value)}
-              className="w-full min-h-[44px] h-11 rounded-xl px-3.5 text-xs bg-white/80 dark:bg-slate-900/80 border border-slate-300 dark:border-slate-800 text-slate-900 dark:text-white outline-none focus:border-sky-500"
+              className="w-full min-h-[44px] h-11 rounded-xl px-3.5 text-xs bg-[#F1F9FC] border border-[#E6F1F5] text-[#111111] outline-none focus:border-[#673AB7]"
             >
-              <option value="Gate #1 (North Main)">Gate #1 (North Main)</option>
-              <option value="Gate #2 (Service & Commercial Trucks)">Gate #2 (Service & Commercial Trucks)</option>
-              <option value="Gate #3 (South Pedestrian Gate)">Gate #3 (South Pedestrian Gate)</option>
+              <option value="Gate #1 (North Main)">Gate #1 (North Main — Visitor & Resident)</option>
+              <option value="Gate #2 (Service & Trucks)">Gate #2 (Service, Contractors & Commercial Trucks)</option>
+              <option value="Gate #3 (South Pedestrian)">Gate #3 (South Pedestrian Checkpoint)</option>
             </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold tracking-wide text-[#111111] mb-1.5">
+              Duty Shift Schedule
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { id: 'DAY', label: 'Day (07:00 - 15:00)' },
+                { id: 'NIGHT', label: 'Night (23:00 - 07:00)' },
+                { id: 'ROTATIONAL', label: 'Rotational' },
+              ].map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => setShift(s.id as any)}
+                  className={`py-2 px-1 text-center rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                    shift === s.id
+                      ? 'bg-[#F1F9FC] border-[#673AB7] text-[#673AB7] ring-1 ring-[#673AB7]/30'
+                      : 'bg-white border-[#E6F1F5] text-[#111111] hover:border-[#673AB7]/30'
+                  }`}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           <Input
             label="Society Guard Invitation Code (Optional)"
-            placeholder="e.g. EMR-GUARD-2026"
+            placeholder="e.g. EMR-SEC-2026"
             value={invitationCode}
             onChange={(e) => setInvitationCode(e.target.value)}
-            helperText="Provided by Chief Security Officer or Society Estate Manager."
+            helperText="Provided by Chief Security Officer or Estate Manager for fast-track verification."
           />
 
-          <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400 space-y-1">
-            <div className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-              <BadgeAlert className="w-4 h-4 text-emerald-500" />
-              <span>Supervisor Approval Verification</span>
+          <div className="p-3.5 rounded-xl bg-[#F5FAFC] border border-[#E6F1F5] text-xs text-[#A9B0B8] space-y-1">
+            <div className="font-semibold text-[#111111] flex items-center gap-1.5">
+              <Lock className="w-4 h-4 text-[#673AB7]" />
+              <span>Gate Terminal Security Lock</span>
             </div>
-            <p>
-              Guard credentials are mathematically locked to the designated gate.
-              Upon Chief Security Officer approval, your terminal will unlock.
+            <p className="leading-relaxed">
+              Upon approval by{' '}
+              <strong className="text-[#111111]">{selectedSociety?.societyName || 'the society'}</strong>{' '}
+              Security Officer or Admin, your Security Guard Sentinel terminal will unlock.
             </p>
           </div>
 
@@ -228,7 +296,7 @@ export const GuardRegistration: React.FC = () => {
             Submit Guard Registration
           </Button>
         </form>
-      </GlassCard>
+      </div>
     </div>
   );
 };

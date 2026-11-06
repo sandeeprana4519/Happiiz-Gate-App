@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { ResidentHeader } from '../../components/layout/ResidentHeader';
 import { ResidentBottomNav, ResidentTab } from '../../components/layout/ResidentBottomNav';
@@ -17,88 +17,201 @@ import { HelpDeskIllustration3D } from '../../components/illustrations/HelpDeskI
 import { NoticeBoardIllustration3D } from '../../components/illustrations/NoticeBoardIllustration3D';
 import { PaymentIllustration3D } from '../../components/illustrations/PaymentIllustration3D';
 import { AmenitiesIllustration3D } from '../../components/illustrations/AmenitiesIllustration3D';
-import { VisitorEntryModal, VisitorCategory } from '../../components/common/VisitorEntryModal';
-import {
-  HelpDeskModal,
-  NoticeBoardModal,
-  SocietyPaymentModal,
-  BookAmenitiesModal,
-} from '../../components/common/CommunityModals';
-import {
-  Clock,
-  CheckCircle2,
-  Calendar,
-  MessageSquare,
+
+// Modals
+import { ResidentVisitorPreApprovalModal } from '../../components/resident/ResidentVisitorPreApprovalModal';
+import { ResidentAllowCabModal } from '../../components/resident/ResidentAllowCabModal';
+import { ResidentDigitalGatePassModal } from '../../components/resident/ResidentDigitalGatePassModal';
+import { ResidentIncomingApprovalCallModal } from '../../components/resident/ResidentIncomingApprovalCallModal';
+import { ResidentEmergencySosModal } from '../../components/resident/ResidentEmergencySosModal';
+import { ResidentHouseholdModal } from '../../components/resident/ResidentHouseholdModal';
+import { ResidentHelpDeskModal } from '../../components/resident/ResidentHelpDeskModal';
+import { ResidentNoticeBoardModal } from '../../components/resident/ResidentNoticeBoardModal';
+import { ResidentPaymentsModal } from '../../components/resident/ResidentPaymentsModal';
+import { ResidentAmenitiesModal } from '../../components/resident/ResidentAmenitiesModal';
+import { ResidentServicesModal } from '../../components/resident/ResidentServicesModal';
+import { ResidentCommunityModal } from '../../components/resident/ResidentCommunityModal';
+import { ResidentMessageSecurityModal } from '../../components/resident/ResidentMessageSecurityModal';
+
+import { residentService } from '../../services/firebase/resident.service';
+import { syncBus } from '../../services/firebase/sync.service';
+import { ResidentGatePass } from '../../types/resident';
+import { GuardVisitor, VisitorCategoryType } from '../../types/guard';
+import { 
+  Clock, 
+  CheckCircle2, 
+  QrCode, 
+  Users, 
+  ShieldAlert, 
+  MessageSquare, 
+  Send, 
+  Car, 
+  CreditCard, 
   Wrench,
-  Search,
-  Phone,
-  Shield,
-  ArrowRight,
+  AlertTriangle,
+  ArrowRight
 } from 'lucide-react';
 
 export const ResidentDashboard: React.FC = () => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<ResidentTab>('home');
 
-  // Visitor Form Modal State
-  const [selectedCategory, setSelectedCategory] = useState<VisitorCategory | null>(null);
+  // Resident Metadata
+  const societyId = user?.societyId || 'soc_emerald_heights';
+  const societyName = user?.societyName || 'Emerald Heights Luxury Enclave';
+  const building = user?.buildingName || 'Tower B';
+  const flatNumber = user?.flatNumber || 'B-704';
+  const residentUid = user?.uid || 'res_priya';
+  const residentName = user?.displayName || user?.fullName || 'Dr. Priya Varma';
+  const residentPhone = user?.phoneNumber || '+91 98201 12345';
 
-  // Community Modals State
+  // Live Data Stores
+  const [passes, setPasses] = useState<ResidentGatePass[]>([]);
+  const [incomingVisitor, setIncomingVisitor] = useState<GuardVisitor | null>(null);
+  const [selectedPassForView, setSelectedPassForView] = useState<ResidentGatePass | null>(null);
+
+  // Modal Open States
+  const [preApproveCategory, setPreApproveCategory] = useState<VisitorCategoryType | null>(null);
+  const [openAllowCab, setOpenAllowCab] = useState(false);
   const [openHelpDesk, setOpenHelpDesk] = useState(false);
   const [openNoticeBoard, setOpenNoticeBoard] = useState(false);
   const [openPayment, setOpenPayment] = useState(false);
   const [openAmenities, setOpenAmenities] = useState(false);
+  const [openHousehold, setOpenHousehold] = useState(false);
+  const [openServices, setOpenServices] = useState(false);
+  const [openCommunity, setOpenCommunity] = useState(false);
+  const [openMessageSecurity, setOpenMessageSecurity] = useState(false);
+  const [openEmergencySos, setOpenEmergencySos] = useState(false);
 
-  // Recent Resident Activity Data
-  const [recentPasses, setRecentPasses] = useState([
-    {
-      id: 'PASS-8921',
-      name: 'Karan Mehra',
-      type: 'Guest',
-      code: '829415',
-      time: 'Today, 04:30 PM',
-      status: 'Approved',
-    },
-    {
-      id: 'PASS-7732',
-      name: 'Swiggy Food Courier',
-      type: 'Delivery',
-      code: '310928',
-      time: 'Today, 01:15 PM',
-      status: 'CheckedIn',
-    },
-    {
-      id: 'PASS-6119',
-      name: 'Urban Company Electrician',
-      type: 'Service',
-      code: '902144',
-      time: 'Yesterday',
-      status: 'Completed',
-    },
-  ]);
+  // Activity filter state
+  const [activityFilter, setActivityFilter] = useState<'TODAY' | 'UPCOMING' | 'HISTORY'>('TODAY');
 
-  const handleVisitorSubmit = (data: any) => {
-    const newEntry = {
-      id: `PASS-${Math.floor(1000 + Math.random() * 9000)}`,
-      name: data.visitorName || data.category,
-      type: data.category,
-      code: data.passCode,
-      time: 'Just now',
-      status: 'Approved',
+  // Fetch resident passes & poll for incoming doorbell requests
+  const loadResidentData = useCallback(async () => {
+    try {
+      const pList = await residentService.getResidentPasses(societyId, residentUid);
+      setPasses(pList);
+
+      // Check for incoming doorbell approval from guard terminal
+      const incoming = await residentService.checkForIncomingApprovals(societyId, flatNumber);
+      if (incoming && incoming.id !== incomingVisitor?.id) {
+        setIncomingVisitor(incoming);
+      }
+    } catch (err) {
+      console.error('[ResidentDashboard] Data fetch error:', err);
+    }
+  }, [societyId, residentUid, flatNumber, incomingVisitor]);
+
+  useEffect(() => {
+    loadResidentData();
+
+    // Instant real-time updates across portals
+    const unsubscribeSync = syncBus.subscribeAll((event) => {
+      if (event.societyId === societyId || event.societyId === 'all') {
+        loadResidentData();
+      }
+    });
+
+    const interval = setInterval(() => {
+      loadResidentData();
+    }, 6000);
+
+    return () => {
+      clearInterval(interval);
+      unsubscribeSync();
     };
-    setRecentPasses([newEntry, ...recentPasses]);
+  }, [loadResidentData, societyId]);
+
+  // Handle incoming approval actions
+  const handleAcceptIncoming = async (visitorId: string) => {
+    await residentService.respondToIncomingApproval(societyId, visitorId, 'ACCEPT');
+    setIncomingVisitor(null);
+    await loadResidentData();
   };
 
+  const handleDenyIncoming = async (visitorId: string) => {
+    await residentService.respondToIncomingApproval(societyId, visitorId, 'DENY');
+    setIncomingVisitor(null);
+    await loadResidentData();
+  };
+
+  const handlePassCreated = (newPass: ResidentGatePass) => {
+    setPasses((prev) => [newPass, ...prev]);
+    setSelectedPassForView(newPass);
+  };
+
+  const handleCancelPass = async (passId: string) => {
+    await residentService.cancelPreApprovedPass(societyId, passId);
+    await loadResidentData();
+  };
+
+  // Activity Filter Logic
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const filteredPasses = passes.filter((p) => {
+    if (activityFilter === 'TODAY') {
+      return p.expectedDate === todayStr || p.status === 'INSIDE';
+    }
+    if (activityFilter === 'UPCOMING') {
+      return p.expectedDate > todayStr || p.status === 'PRE_APPROVED';
+    }
+    return true; // HISTORY
+  });
+
   return (
-    <div className="min-h-screen bg-[#FFFFFF] text-[#111111] pb-24 select-none">
-      {/* 1. TOP HEADER (Reference Screenshot 1) */}
+    <div className="min-h-screen bg-[#FFFFFF] text-[#111111] pb-24 select-none relative font-sans antialiased">
+      {/* 1. TOP HEADER (Reference Screenshot 1: Bell with red badge 2, Happiiz Gate, Avatar) */}
       <ResidentHeader />
 
-      <main className="max-w-lg mx-auto px-4 sm:px-6 pt-5 space-y-7">
+      <main className="max-w-lg mx-auto px-4 sm:px-6 pt-5 space-y-6">
+        {/* INCOMING VISITOR ALERT BANNER (If a visitor is waiting at gate) */}
+        {incomingVisitor && (
+          <div
+            onClick={() => {}}
+            className="p-4 rounded-3xl bg-amber-500 text-white shadow-xl flex items-center justify-between animate-pulse cursor-pointer"
+          >
+            <div className="flex items-center gap-3">
+              <span className="w-3 h-3 rounded-full bg-white animate-ping" />
+              <div>
+                <p className="font-black text-sm">{incomingVisitor.visitorName} is at Gate!</p>
+                <p className="text-xs text-amber-100">
+                  {incomingVisitor.gateName} · Tap to Authorize
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => handleAcceptIncoming(incomingVisitor.id)}
+              className="px-3.5 py-1.5 rounded-xl bg-white text-amber-950 font-black text-xs shadow-sm hover:bg-amber-100 transition-colors"
+            >
+              Approve
+            </button>
+          </div>
+        )}
+
+        {/* ======================================================== */}
         {/* TAB 1: HOME (Exact Recreation of Reference Screenshot 1) */}
+        {/* ======================================================== */}
         {activeTab === 'home' && (
-          <>
-            {/* SECTION: PRE APPROVE VISITOR */}
+          <div className="space-y-6 animate-fade-in">
+            {/* RESIDENT GREETING & FLAT COORDINATES */}
+            <div className="flex items-center justify-between pt-1">
+              <div>
+                <h1 className="text-lg font-black text-[#111111] tracking-tight">
+                  Welcome, {residentName}
+                </h1>
+                <p className="text-xs text-[#A9B0B8] font-medium">
+                  Flat <strong className="text-[#673AB7]">{flatNumber}</strong> · {societyName}
+                </p>
+              </div>
+              <button
+                onClick={() => setOpenEmergencySos(true)}
+                className="px-3 py-1.5 rounded-2xl bg-red-50 border border-red-200 text-red-600 font-extrabold text-xs flex items-center gap-1.5 hover:bg-red-100 transition-colors cursor-pointer"
+              >
+                <ShieldAlert className="w-3.5 h-3.5" />
+                <span>SOS</span>
+              </button>
+            </div>
+
+            {/* SECTION 1: PRE APPROVE VISITOR (Reference Screenshot 1) */}
             <section className="space-y-3">
               <div>
                 <h2 className="text-xl sm:text-2xl font-extrabold text-[#111111] tracking-tight">
@@ -109,33 +222,62 @@ export const ResidentDashboard: React.FC = () => {
                 </p>
               </div>
 
-              {/* Horizontal Scrollable Visitor Category Cards */}
+              {/* Horizontal Scrollable Category Cards with 3D Illustrations */}
               <div className="flex gap-3 overflow-x-auto no-scrollbar pb-1 pt-1 -mx-4 px-4 sm:mx-0 sm:px-0">
                 <VisitorCategoryCard
                   title={'Add\nGuest'}
                   illustration={<GuestIllustration3D size={105} />}
-                  onClick={() => setSelectedCategory('Guest')}
+                  onClick={() => setPreApproveCategory('Guest')}
                 />
                 <VisitorCategoryCard
                   title={'Add\nDelivery'}
                   illustration={<DeliveryIllustration3D size={105} />}
-                  onClick={() => setSelectedCategory('Delivery')}
+                  onClick={() => setPreApproveCategory('Delivery')}
                 />
                 <VisitorCategoryCard
                   title={'Add\nService'}
                   illustration={<ServiceIllustration3D size={105} />}
-                  onClick={() => setSelectedCategory('Service')}
+                  onClick={() => setPreApproveCategory('Service')}
                 />
                 <VisitorCategoryCard
                   title={'Add\nCab'}
                   illustration={<CabIllustration3D size={105} />}
-                  onClick={() => setSelectedCategory('Cab')}
+                  onClick={() => setOpenAllowCab(true)}
                 />
               </div>
             </section>
 
-            {/* SECTION: COMMUNITY */}
-            <section className="space-y-3 pt-2">
+            {/* QUICK STATS TICKER */}
+            <section className="grid grid-cols-3 gap-2.5">
+              <div
+                onClick={() => setActiveTab('activity')}
+                className="p-3 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] text-center cursor-pointer hover:border-[#673AB7] transition-all"
+              >
+                <p className="text-xl font-extrabold text-[#673AB7]">
+                  {passes.filter((p) => p.status === 'INSIDE').length}
+                </p>
+                <p className="text-[10px] font-bold text-[#64748B] mt-0.5">Inside Campus</p>
+              </div>
+              <div
+                onClick={() => setActiveTab('activity')}
+                className="p-3 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] text-center cursor-pointer hover:border-[#673AB7] transition-all"
+              >
+                <p className="text-xl font-extrabold text-emerald-600">
+                  {passes.filter((p) => p.status === 'PRE_APPROVED').length}
+                </p>
+                <p className="text-[10px] font-bold text-[#64748B] mt-0.5">Pre-Approved</p>
+              </div>
+              <div
+                onClick={() => setOpenPayment(true)}
+                className="p-3 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] text-center cursor-pointer hover:border-[#673AB7] transition-all"
+              >
+                <p className="text-xl font-extrabold text-amber-600">₹4.2k</p>
+                <p className="text-[10px] font-bold text-[#64748B] mt-0.5">Dues Pending</p>
+              </div>
+            </section>
+
+            {/* SECTION 2: COMMUNITY (Reference Screenshot 1) */}
+            <section className="space-y-3 pt-1">
               <div>
                 <h2 className="text-xl sm:text-2xl font-extrabold text-[#111111] tracking-tight">
                   Community
@@ -145,7 +287,7 @@ export const ResidentDashboard: React.FC = () => {
                 </p>
               </div>
 
-              {/* Vertically Stacked Wide Cards */}
+              {/* Vertically Stacked Wide Cards matching Reference Screenshot 1 */}
               <div className="space-y-3">
                 <CommunityActionCard
                   title="HelpDesk"
@@ -177,68 +319,150 @@ export const ResidentDashboard: React.FC = () => {
                 />
               </div>
             </section>
-          </>
+
+            {/* MORE RESIDENT QUICK ACTIONS */}
+            <section className="grid grid-cols-2 gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => setOpenHousehold(true)}
+                className="p-3.5 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] text-left hover:border-[#673AB7] transition-all cursor-pointer flex items-center gap-3"
+              >
+                <div className="w-10 h-10 rounded-2xl bg-[#673AB7]/10 text-[#673AB7] flex items-center justify-center shrink-0">
+                  <Users className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-xs text-[#111111]">Household & Staff</h4>
+                  <p className="text-[10px] text-[#A9B0B8]">Family, maids, vehicles</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setOpenMessageSecurity(true)}
+                className="p-3.5 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] text-left hover:border-[#673AB7] transition-all cursor-pointer flex items-center gap-3"
+              >
+                <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                  <MessageSquare className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-xs text-[#111111]">Gate Instructions</h4>
+                  <p className="text-[10px] text-[#A9B0B8]">Message guard cabin</p>
+                </div>
+              </button>
+            </section>
+          </div>
         )}
 
-        {/* TAB 2: ACTIVITY (Visitor History & Approvals) */}
+        {/* ======================================================== */}
+        {/* TAB 2: ACTIVITY (Visitor History, Pre-Approved & Passes) */}
+        {/* ======================================================== */}
         {activeTab === 'activity' && (
           <section className="space-y-4 animate-fade-in">
-            <div>
-              <h2 className="text-xl sm:text-2xl font-extrabold text-[#111111] tracking-tight">
-                Gate & Visitor Activity
-              </h2>
-              <p className="text-xs sm:text-sm text-[#A9B0B8] mt-0.5">
-                Passes generated for Flat {user?.flatNumber || 'B-704'}
-              </p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl sm:text-2xl font-extrabold text-[#111111] tracking-tight">
+                  Gate & Visitor Activity
+                </h2>
+                <p className="text-xs sm:text-sm text-[#A9B0B8] mt-0.5">
+                  Visitor passes & clearances for Flat {flatNumber}
+                </p>
+              </div>
+              <button
+                onClick={() => setPreApproveCategory('Guest')}
+                className="px-3 py-1.5 rounded-xl bg-[#673AB7] text-white text-xs font-bold hover:bg-[#512DA8] transition-colors cursor-pointer"
+              >
+                + New Pass
+              </button>
             </div>
 
-            <div className="space-y-2.5">
-              {recentPasses.map((p) => (
-                <div
-                  key={p.id}
-                  className="p-4 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] flex items-center justify-between"
+            {/* Filter Pills */}
+            <div className="grid grid-cols-3 gap-2">
+              {(['TODAY', 'UPCOMING', 'HISTORY'] as const).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setActivityFilter(f)}
+                  className={`py-2 rounded-xl text-xs font-bold transition-all text-center ${
+                    activityFilter === f
+                      ? 'bg-[#673AB7] text-white shadow-xs'
+                      : 'bg-[#F1F9FC] text-[#64748B] hover:bg-[#E6F1F5]'
+                  }`}
                 >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <h4 className="font-bold text-sm text-[#111111]">{p.name}</h4>
-                      <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-white text-[#673AB7] border border-[#E6F1F5]">
-                        {p.type}
-                      </span>
-                    </div>
-                    <p className="text-xs text-[#A9B0B8] flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5" />
-                      <span>{p.time}</span>
-                      <span>·</span>
-                      <span className="font-mono font-bold text-[#673AB7]">Code #{p.code}</span>
-                    </p>
-                  </div>
-                  <span
-                    className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                      p.status === 'CheckedIn'
-                        ? 'bg-blue-100 text-blue-700'
-                        : p.status === 'Completed'
-                        ? 'bg-slate-100 text-slate-700'
-                        : 'bg-emerald-100 text-emerald-700'
-                    }`}
-                  >
-                    {p.status}
-                  </span>
-                </div>
+                  {f === 'TODAY' ? 'Today' : f === 'UPCOMING' ? 'Upcoming' : 'History'}
+                </button>
               ))}
+            </div>
+
+            {/* Passes List */}
+            <div className="space-y-2.5">
+              {filteredPasses.length === 0 ? (
+                <div className="p-8 text-center rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] text-xs text-[#A9B0B8]">
+                  No passes found under {activityFilter.toLowerCase()}.
+                </div>
+              ) : (
+                filteredPasses.map((p) => (
+                  <div
+                    key={p.id}
+                    onClick={() => setSelectedPassForView(p)}
+                    className="p-4 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] flex items-center justify-between hover:border-[#673AB7] transition-all cursor-pointer"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-extrabold text-sm text-[#111111]">{p.visitorName}</h4>
+                        <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-white text-[#673AB7] border border-[#E6F1F5]">
+                          {p.category}
+                        </span>
+                      </div>
+                      <p className="text-xs text-[#A9B0B8] flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5" />
+                        <span>{p.expectedTime}</span>
+                        <span>·</span>
+                        <span className="font-mono font-bold text-[#673AB7]">Code #{p.passCode}</span>
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                          p.status === 'INSIDE'
+                            ? 'bg-blue-100 text-blue-800'
+                            : p.status === 'CHECKED_OUT'
+                            ? 'bg-slate-200 text-slate-700'
+                            : p.status === 'PRE_APPROVED'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : 'bg-amber-100 text-amber-800'
+                        }`}
+                      >
+                        {p.status}
+                      </span>
+                      <QrCode className="w-4 h-4 text-[#673AB7]" />
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </section>
         )}
 
-        {/* TAB 3: SOCIAL (Community Feed & Directory) */}
+        {/* ======================================================== */}
+        {/* TAB 3: SOCIAL (Community Posts, Discussions & Directory) */}
+        {/* ======================================================== */}
         {activeTab === 'social' && (
           <section className="space-y-4 animate-fade-in">
-            <div>
-              <h2 className="text-xl sm:text-2xl font-extrabold text-[#111111] tracking-tight">
-                Society Social
-              </h2>
-              <p className="text-xs sm:text-sm text-[#A9B0B8] mt-0.5">
-                Emerald Heights Community Discussions
-              </p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl sm:text-2xl font-extrabold text-[#111111] tracking-tight">
+                  Society Social
+                </h2>
+                <p className="text-xs sm:text-sm text-[#A9B0B8] mt-0.5">
+                  Emerald Heights Community Discussions
+                </p>
+              </div>
+              <button
+                onClick={() => setOpenCommunity(true)}
+                className="px-3.5 py-1.5 rounded-xl bg-[#673AB7] text-white text-xs font-bold hover:bg-[#512DA8] transition-colors cursor-pointer"
+              >
+                Directory & Posts
+              </button>
             </div>
 
             <div className="space-y-3">
@@ -275,31 +499,41 @@ export const ResidentDashboard: React.FC = () => {
           </section>
         )}
 
+        {/* ======================================================== */}
         {/* TAB 4: SERVICE (Vendor & Domestic Staff Booking) */}
+        {/* ======================================================== */}
         {activeTab === 'service' && (
           <section className="space-y-4 animate-fade-in">
-            <div>
-              <h2 className="text-xl sm:text-2xl font-extrabold text-[#111111] tracking-tight">
-                Home Services
-              </h2>
-              <p className="text-xs sm:text-sm text-[#A9B0B8] mt-0.5">
-                Verified society service providers & daily help
-              </p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl sm:text-2xl font-extrabold text-[#111111] tracking-tight">
+                  Home Services
+                </h2>
+                <p className="text-xs sm:text-sm text-[#A9B0B8] mt-0.5">
+                  Verified society service providers & daily help
+                </p>
+              </div>
+              <button
+                onClick={() => setOpenServices(true)}
+                className="px-3.5 py-1.5 rounded-xl bg-[#673AB7] text-white text-xs font-bold hover:bg-[#512DA8] transition-colors cursor-pointer"
+              >
+                View Marketplace
+              </button>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               {[
-                { title: 'Electrician', rating: '4.8 ★', available: '3 active' },
-                { title: 'Plumbing', rating: '4.9 ★', available: '2 active' },
-                { title: 'House Cleaning', rating: '4.7 ★', available: '5 active' },
-                { title: 'Carpentry', rating: '4.8 ★', available: '1 active' },
-                { title: 'Appliance Repair', rating: '4.6 ★', available: '4 active' },
-                { title: 'Pest Control', rating: '4.9 ★', available: '2 active' },
+                { title: 'Electrician', rating: '4.8 ★', available: '3 active', price: '₹199' },
+                { title: 'Plumbing', rating: '4.9 ★', available: '2 active', price: '₹249' },
+                { title: 'House Cleaning', rating: '4.7 ★', available: '5 active', price: '₹599' },
+                { title: 'Carpentry', rating: '4.8 ★', available: '1 active', price: '₹299' },
+                { title: 'Appliance Repair', rating: '4.6 ★', available: '4 active', price: '₹349' },
+                { title: 'Pest Control', rating: '4.9 ★', available: '2 active', price: '₹899' },
               ].map((s) => (
                 <button
                   key={s.title}
                   type="button"
-                  onClick={() => alert(`Connecting with verified ${s.title} partners for Emerald Heights...`)}
+                  onClick={() => setOpenServices(true)}
                   className="p-3.5 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] text-left hover:border-[#673AB7] transition-all cursor-pointer group"
                 >
                   <p className="font-bold text-sm text-[#111111] group-hover:text-[#673AB7]">
@@ -307,7 +541,7 @@ export const ResidentDashboard: React.FC = () => {
                   </p>
                   <div className="flex items-center justify-between text-[11px] text-[#A9B0B8] mt-1">
                     <span className="text-amber-500 font-bold">{s.rating}</span>
-                    <span>{s.available}</span>
+                    <span className="font-semibold text-slate-800">From {s.price}</span>
                   </div>
                 </button>
               ))}
@@ -316,27 +550,150 @@ export const ResidentDashboard: React.FC = () => {
         )}
       </main>
 
-      {/* FIXED BLACK BOTTOM NAVIGATION WITH ELEVATED PURPLE SECURITY BUTTON */}
+      {/* FIXED BLACK BOTTOM NAVIGATION WITH ELEVATED PURPLE SECURITY SHIELD BUTTON */}
       <ResidentBottomNav
         activeTab={activeTab}
         onTabChange={(tab) => setActiveTab(tab)}
+        onSecurityClick={() => setOpenEmergencySos(true)}
       />
 
-      {/* VISITOR ENTRY MODAL */}
-      {selectedCategory && (
-        <VisitorEntryModal
-          isOpen={Boolean(selectedCategory)}
-          onClose={() => setSelectedCategory(null)}
-          category={selectedCategory}
-          onSubmit={handleVisitorSubmit}
+      {/* ======================================================== */}
+      {/* 2. MODALS */}
+      {/* ======================================================== */}
+      {/* Pre-Approve Visitor Modal */}
+      {preApproveCategory && (
+        <ResidentVisitorPreApprovalModal
+          isOpen={Boolean(preApproveCategory)}
+          onClose={() => setPreApproveCategory(null)}
+          initialCategory={preApproveCategory}
+          societyId={societyId}
+          societyName={societyName}
+          building={building}
+          flatNumber={flatNumber}
+          residentUid={residentUid}
+          residentName={residentName}
+          onSuccess={handlePassCreated}
         />
       )}
 
-      {/* COMMUNITY ACTION MODALS */}
-      <HelpDeskModal isOpen={openHelpDesk} onClose={() => setOpenHelpDesk(false)} />
-      <NoticeBoardModal isOpen={openNoticeBoard} onClose={() => setOpenNoticeBoard(false)} />
-      <SocietyPaymentModal isOpen={openPayment} onClose={() => setOpenPayment(false)} />
-      <BookAmenitiesModal isOpen={openAmenities} onClose={() => setOpenAmenities(false)} />
+      {/* Allow My Cab Modal */}
+      <ResidentAllowCabModal
+        isOpen={openAllowCab}
+        onClose={() => setOpenAllowCab(false)}
+        societyId={societyId}
+        societyName={societyName}
+        building={building}
+        flatNumber={flatNumber}
+        residentUid={residentUid}
+        residentName={residentName}
+        onSuccess={handlePassCreated}
+      />
+
+      {/* Digital GatePass Modal */}
+      <ResidentDigitalGatePassModal
+        isOpen={Boolean(selectedPassForView)}
+        onClose={() => setSelectedPassForView(null)}
+        pass={selectedPassForView}
+        onCancelPass={handleCancelPass}
+      />
+
+      {/* Incoming Doorbell Visitor Approval Call */}
+      <ResidentIncomingApprovalCallModal
+        visitor={incomingVisitor}
+        onAccept={handleAcceptIncoming}
+        onDeny={handleDenyIncoming}
+        onDismiss={() => setIncomingVisitor(null)}
+      />
+
+      {/* Emergency SOS Center */}
+      <ResidentEmergencySosModal
+        isOpen={openEmergencySos}
+        onClose={() => setOpenEmergencySos(false)}
+        societyId={societyId}
+        building={building}
+        flatNumber={flatNumber}
+        residentUid={residentUid}
+        residentName={residentName}
+        residentPhone={residentPhone}
+      />
+
+      {/* Household & Staff */}
+      <ResidentHouseholdModal
+        isOpen={openHousehold}
+        onClose={() => setOpenHousehold(false)}
+        residentUid={residentUid}
+        flatNumber={flatNumber}
+      />
+
+      {/* HelpDesk */}
+      <ResidentHelpDeskModal
+        isOpen={openHelpDesk}
+        onClose={() => setOpenHelpDesk(false)}
+        societyId={societyId}
+        residentUid={residentUid}
+        residentName={residentName}
+        building={building}
+        flatNumber={flatNumber}
+      />
+
+      {/* Notice Board */}
+      <ResidentNoticeBoardModal
+        isOpen={openNoticeBoard}
+        onClose={() => setOpenNoticeBoard(false)}
+        societyId={societyId}
+        residentUid={residentUid}
+        residentName={residentName}
+        flatNumber={flatNumber}
+      />
+
+      {/* Society Payments */}
+      <ResidentPaymentsModal
+        isOpen={openPayment}
+        onClose={() => setOpenPayment(false)}
+        societyId={societyId}
+        residentUid={residentUid}
+        flatNumber={flatNumber}
+      />
+
+      {/* Book Amenities */}
+      <ResidentAmenitiesModal
+        isOpen={openAmenities}
+        onClose={() => setOpenAmenities(false)}
+        societyId={societyId}
+        residentUid={residentUid}
+        residentName={residentName}
+        flatNumber={flatNumber}
+      />
+
+      {/* Home Services */}
+      <ResidentServicesModal
+        isOpen={openServices}
+        onClose={() => setOpenServices(false)}
+        residentUid={residentUid}
+        residentName={residentName}
+        flatNumber={flatNumber}
+      />
+
+      {/* Community Social & Directory */}
+      <ResidentCommunityModal
+        isOpen={openCommunity}
+        onClose={() => setOpenCommunity(false)}
+        societyId={societyId}
+        residentUid={residentUid}
+        residentName={residentName}
+        flatNumber={flatNumber}
+      />
+
+      {/* Message Security */}
+      <ResidentMessageSecurityModal
+        isOpen={openMessageSecurity}
+        onClose={() => setOpenMessageSecurity(false)}
+        societyId={societyId}
+        building={building}
+        flatNumber={flatNumber}
+        residentUid={residentUid}
+        residentName={residentName}
+      />
     </div>
   );
 };

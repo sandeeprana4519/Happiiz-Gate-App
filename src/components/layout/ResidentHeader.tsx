@@ -3,17 +3,43 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { Bell, User, LogOut, Shield } from 'lucide-react';
+import { Bell, User, LogOut, Shield, Check, Trash2 } from 'lucide-react';
 import { Modal } from '../common/Modal';
+import { notificationEngine, EcosystemNotification } from '../../services/firebase/notification.service';
+import { syncBus } from '../../services/firebase/sync.service';
 
 export const ResidentHeader: React.FC = () => {
   const { user, logout } = useAuth();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [notifications, setNotifications] = useState<EcosystemNotification[]>([]);
   const navigate = useNavigate();
+
+  const residentUid = user?.uid || 'usr_resident_04';
+
+  const loadNotifications = () => {
+    const list = notificationEngine.getUserNotifications(residentUid);
+    setNotifications(list);
+  };
+
+  useEffect(() => {
+    loadNotifications();
+    const unsub = syncBus.subscribeAll(() => {
+      loadNotifications();
+    });
+    return () => unsub();
+  }, [residentUid]);
+
+  const unreadCount = notifications.filter((n) => !n.isRead).length;
+
+  const handleOpenNotifications = () => {
+    setShowNotifications(true);
+    notificationEngine.markAllAsRead(residentUid);
+    loadNotifications();
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -23,17 +49,19 @@ export const ResidentHeader: React.FC = () => {
   return (
     <>
       <header className="sticky top-0 z-30 h-16 w-full bg-[#FFFFFF] border-b border-[#E6F1F5] px-4 sm:px-6 flex items-center justify-between">
-        {/* Left: Notification Bell with Red Badge */}
+        {/* Left: Notification Bell with Dynamic Unread Badge */}
         <div className="relative">
           <button
-            onClick={() => setShowNotifications(true)}
+            onClick={handleOpenNotifications}
             className="p-2 rounded-xl text-[#64748B] hover:text-[#111111] transition-colors cursor-pointer relative"
             aria-label="View notifications"
           >
             <Bell className="w-6 h-6 stroke-[2]" />
-            <span className="absolute top-1 left-1 min-w-[18px] h-[18px] px-1 rounded-full bg-[#E53945] text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-white">
-              2
-            </span>
+            {unreadCount > 0 && (
+              <span className="absolute top-1 left-1 min-w-[18px] h-[18px] px-1 rounded-full bg-[#E53945] text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-white animate-pulse">
+                {unreadCount}
+              </span>
+            )}
           </button>
         </div>
 
@@ -119,28 +147,41 @@ export const ResidentHeader: React.FC = () => {
         isOpen={showNotifications}
         onClose={() => setShowNotifications(false)}
         title="Notifications"
-        description="Society announcements & gate notices"
+        description="Live visitor entries, service jobs & community alerts"
         maxWidth="sm"
       >
-        <div className="space-y-3">
-          <div className="p-3.5 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] text-xs">
-            <div className="flex items-center justify-between font-bold text-[#673AB7] mb-1">
-              <span>Visitor at Main Gate</span>
-              <span className="text-[10px] text-[#A9B0B8]">5m ago</span>
+        <div className="space-y-2.5 max-h-96 overflow-y-auto">
+          {notifications.length === 0 ? (
+            <div className="py-8 text-center text-xs text-[#A9B0B8]">
+              No notifications yet. You are completely caught up!
             </div>
-            <p className="text-[#111111]">
-              Swiggy delivery agent #4928 checked in at North Gate.
-            </p>
-          </div>
-          <div className="p-3.5 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] text-xs">
-            <div className="flex items-center justify-between font-bold text-[#111111] mb-1">
-              <span>Society Maintenance Due</span>
-              <span className="text-[10px] text-[#A9B0B8]">Today</span>
-            </div>
-            <p className="text-[#64748B]">
-              Monthly maintenance charges of ₹4,200 due on 10th. Tap "Do Society Payment" to pay instantly.
-            </p>
-          </div>
+          ) : (
+            notifications.map((n) => (
+              <div
+                key={n.id}
+                className={`p-3 rounded-2xl border text-xs transition-all ${
+                  !n.isRead
+                    ? 'bg-[#F1F9FC] border-[#673AB7]/30'
+                    : 'bg-[#FFFFFF] border-[#E6F1F5]'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-1.5 font-bold text-[#111111]">
+                    {n.priority === 'CRITICAL' && (
+                      <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
+                    )}
+                    <span className={n.priority === 'CRITICAL' ? 'text-rose-600' : 'text-[#673AB7]'}>
+                      {n.title}
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-[#A9B0B8]">
+                    {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+                <p className="text-[#334155] leading-relaxed">{n.body}</p>
+              </div>
+            ))
+          )}
         </div>
       </Modal>
     </>

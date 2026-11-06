@@ -6,10 +6,8 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { GlassCard } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
-import { SERVICE_CATEGORIES } from '../../config/constants';
 import {
   createAccessRequest,
   saveServicePartnerProfile,
@@ -22,19 +20,40 @@ import {
   AlertCircle,
   Briefcase,
   Check,
+  ShieldAlert,
 } from 'lucide-react';
+
+const SERVICE_PARTNER_CATEGORIES = [
+  'Electrician',
+  'Plumber',
+  'Carpenter',
+  'AC Repair & HVAC',
+  'Housekeeping',
+  'Pest Control',
+  'Appliance Repair',
+  'Painting',
+  'Deep Cleaning',
+  'Security Services',
+  'Elevator & Lifts Maintenance',
+  'Other Services',
+];
 
 export const ServicePartnerRegistration: React.FC = () => {
   const { user, refreshUserProfile } = useAuth();
   const navigate = useNavigate();
 
   const [businessName, setBusinessName] = useState('');
+  const [businessType, setBusinessType] = useState<'INDIVIDUAL' | 'COMPANY'>('COMPANY');
   const [contactNumber, setContactNumber] = useState(user?.phoneNumber || '');
+  const [contactEmail, setContactEmail] = useState(user?.email || '');
   const [businessAddress, setBusinessAddress] = useState('');
   const [serviceAreas, setServiceAreas] = useState('Bengaluru South & Central');
+  const [description, setDescription] = useState('');
+  const [gstNumber, setGstNumber] = useState('');
+  const [panNumber, setPanNumber] = useState('');
   const [selectedCategories, setSelectedCategories] = useState<string[]>([
-    'Elevator & Lifts Maintenance',
-    'HVAC & Air Conditioning',
+    'Electrician',
+    'AC Repair & HVAC',
   ]);
 
   const [loading, setLoading] = useState(false);
@@ -49,12 +68,12 @@ export const ServicePartnerRegistration: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!businessName.trim() || !contactNumber.trim() || !businessAddress.trim()) {
-      setError('Please fill in your company and contact information.');
+      setError('Please fill in your company/contractor details and address.');
       return;
     }
 
     if (selectedCategories.length === 0) {
-      setError('Please select at least one service category.');
+      setError('Please select at least one service category provided.');
       return;
     }
 
@@ -82,7 +101,7 @@ export const ServicePartnerRegistration: React.FC = () => {
         uid: user.uid,
         applicantName: businessName.trim(),
         phoneNumber: contactNumber.trim(),
-        email: user.email,
+        email: contactEmail || user.email,
         requestedRole: 'SERVICE_PARTNER',
         requestData: {
           businessName: businessName.trim(),
@@ -90,6 +109,7 @@ export const ServicePartnerRegistration: React.FC = () => {
           serviceCategories: selectedCategories,
           serviceAreas: serviceAreas.split(',').map((s) => s.trim()),
           contactPhone: contactNumber.trim(),
+          additionalNotes: `Type: ${businessType}. GST: ${gstNumber || 'N/A'}. PAN: ${panNumber || 'N/A'}. Desc: ${description || 'N/A'}.`,
         },
         status: 'PENDING',
         submittedAt: new Date().toISOString(),
@@ -98,6 +118,7 @@ export const ServicePartnerRegistration: React.FC = () => {
       // 3. Update user profile onboarding state
       await updateFirestoreUserProfile(user.uid, {
         primaryRole: 'SERVICE_PARTNER',
+        role: 'SERVICE_PARTNER',
         accountStatus: 'PENDING',
         onboardingCompleted: true,
       });
@@ -115,46 +136,82 @@ export const ServicePartnerRegistration: React.FC = () => {
     <div className="max-w-xl mx-auto py-6 sm:py-10 space-y-6 px-2">
       <Link
         to="/onboarding"
-        className="inline-flex items-center gap-1.5 text-xs text-sky-500 font-semibold hover:text-sky-400"
+        className="inline-flex items-center gap-1.5 text-xs text-[#673AB7] font-semibold hover:underline"
       >
         <ChevronLeft className="w-4 h-4" /> Back to Role Selection
       </Link>
 
       <div className="space-y-1">
-        <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-          <Wrench className="w-6 h-6 text-amber-500" />
+        <h1 className="text-2xl font-extrabold text-[#111111] flex items-center gap-2">
+          <Wrench className="w-6 h-6 text-[#673AB7]" />
           <span>Service Partner Onboarding</span>
         </h1>
-        <p className="text-xs text-slate-500 dark:text-slate-400">
-          Register your maintenance contracting agency or technician service firm.
+        <p className="text-xs text-[#A9B0B8]">
+          Register your maintenance agency or technician service firm to receive bookings in gated societies.
         </p>
       </div>
 
-      <GlassCard elevated className="border-sky-500/20 p-6 sm:p-8 space-y-6">
+      <div className="w-full rounded-2xl bg-[#FFFFFF] border border-[#E6F1F5] shadow-[0_4px_24px_rgba(0,0,0,0.06)] p-6 sm:p-8 space-y-6">
         {error && (
-          <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-500 font-medium flex items-center gap-2">
+          <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-xs text-[#E53945] font-medium flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{error}</span>
           </div>
         )}
 
+        {/* Applicant Verification Summary */}
+        <div className="p-3.5 rounded-xl bg-[#F1F9FC] border border-[#E6F1F5] flex items-center justify-between text-xs">
+          <div>
+            <span className="text-[#A9B0B8] block text-[10px] font-semibold uppercase">Authorized Contact</span>
+            <span className="font-bold text-[#111111] text-sm">{user?.fullName || 'Business Owner'}</span>
+          </div>
+          <div className="text-right">
+            <span className="text-[#A9B0B8] block text-[10px] font-semibold uppercase">Verified Mobile</span>
+            <span className="font-mono font-bold text-[#673AB7]">{user?.phoneNumber || '+91'}</span>
+          </div>
+        </div>
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input
-            label="Business or Contractor Name"
-            placeholder="e.g. Apex Elevators & Facility Services Ltd."
+            label="Business or Contractor Legal Name"
+            placeholder="e.g. Apex Elevators & Facility Services Pvt Ltd"
             value={businessName}
             onChange={(e) => setBusinessName(e.target.value)}
             required
           />
 
+          <div>
+            <label className="block text-xs font-semibold tracking-wide text-[#111111] mb-1.5">
+              Business Legal Structure
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { id: 'COMPANY', label: 'Registered Company / LLP' },
+                { id: 'INDIVIDUAL', label: 'Sole Proprietor / Individual' },
+              ].map((b) => (
+                <button
+                  key={b.id}
+                  type="button"
+                  onClick={() => setBusinessType(b.id as any)}
+                  className={`py-2 px-3 text-center rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                    businessType === b.id
+                      ? 'bg-[#F1F9FC] border-[#673AB7] text-[#673AB7] ring-1 ring-[#673AB7]/30'
+                      : 'bg-white border-[#E6F1F5] text-[#111111] hover:border-[#673AB7]/30'
+                  }`}
+                >
+                  {b.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <Input
-              label="Contact Phone Number"
-              type="tel"
-              placeholder="+91 98888 77777"
-              value={contactNumber}
-              onChange={(e) => setContactNumber(e.target.value)}
-              required
+              label="Contact Email"
+              type="email"
+              placeholder="support@example.com"
+              value={contactEmail}
+              onChange={(e) => setContactEmail(e.target.value)}
             />
             <Input
               label="Operational Cities / Areas"
@@ -166,19 +223,20 @@ export const ServicePartnerRegistration: React.FC = () => {
           </div>
 
           <Input
-            label="Office / Workshop Address"
-            placeholder="Registered business address or operational hub"
+            label="Registered Office / Workshop Address"
+            placeholder="Office, Street, Landmark, PIN Code"
             value={businessAddress}
             onChange={(e) => setBusinessAddress(e.target.value)}
             required
           />
 
+          {/* Service Categories Multi-select */}
           <div>
-            <label className="block text-xs font-semibold tracking-wide text-slate-700 dark:text-slate-300 mb-1.5">
+            <label className="block text-xs font-semibold tracking-wide text-[#111111] mb-1.5">
               Service Categories Provided (Select all that apply)
             </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
-              {SERVICE_CATEGORIES.map((cat) => {
+            <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+              {SERVICE_PARTNER_CATEGORIES.map((cat) => {
                 const isSelected = selectedCategories.includes(cat);
                 return (
                   <button
@@ -187,27 +245,54 @@ export const ServicePartnerRegistration: React.FC = () => {
                     onClick={() => toggleCategory(cat)}
                     className={`p-2.5 rounded-xl text-left text-xs font-medium border flex items-center justify-between transition-all cursor-pointer ${
                       isSelected
-                        ? 'bg-amber-500/15 border-amber-500/40 text-amber-500 dark:text-amber-300'
-                        : 'bg-white/60 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:border-slate-300'
+                        ? 'bg-[#F1F9FC] border-[#673AB7] text-[#673AB7] font-semibold'
+                        : 'bg-white border-[#E6F1F5] text-[#111111] hover:border-[#673AB7]/40'
                     }`}
                   >
                     <span className="truncate pr-1">{cat}</span>
-                    {isSelected && <Check className="w-3.5 h-3.5 shrink-0" />}
+                    {isSelected && <Check className="w-3.5 h-3.5 shrink-0 text-[#673AB7]" />}
                   </button>
                 );
               })}
             </div>
           </div>
 
-          <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400 space-y-1">
-            <div className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-              <Briefcase className="w-4 h-4 text-amber-500" />
-              <span>Partner Verification & Work Orders</span>
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="GSTIN (Optional)"
+              placeholder="e.g. 29AAAAA0000A1Z5"
+              value={gstNumber}
+              onChange={(e) => setGstNumber(e.target.value)}
+            />
+            <Input
+              label="PAN Number (Optional)"
+              placeholder="e.g. ABCDE1234F"
+              value={panNumber}
+              onChange={(e) => setPanNumber(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold tracking-wide text-[#111111] mb-1.5">
+              Service Specialization & Description
+            </label>
+            <textarea
+              rows={2}
+              placeholder="Brief description of experience, certified staff, and equipment capabilities"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="w-full rounded-xl p-3 text-xs bg-[#F1F9FC] border border-[#E6F1F5] text-[#111111] outline-none focus:border-[#673AB7]"
+            />
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-[#F5FAFC] border border-[#E6F1F5] text-xs text-[#A9B0B8] space-y-1">
+            <div className="font-semibold text-[#111111] flex items-center gap-1.5">
+              <Briefcase className="w-4 h-4 text-[#673AB7]" />
+              <span>Super Admin KYC Verification</span>
             </div>
-            <p>
-              Once approved by society administrators, your company can dispatch
-              technicians with valid digital Gate Passes and receive maintenance work
-              orders directly.
+            <p className="leading-relaxed">
+              Upon approval by the Platform Super Admin, your company profile will be verified
+              and your technicians can be dispatched with digital Gate Passes to verified societies.
             </p>
           </div>
 
@@ -219,10 +304,10 @@ export const ServicePartnerRegistration: React.FC = () => {
             loading={loading}
             rightIcon={<ArrowRight className="w-4 h-4" />}
           >
-            Submit Partner Registration
+            Submit Partner Application
           </Button>
         </form>
-      </GlassCard>
+      </div>
     </div>
   );
 };
