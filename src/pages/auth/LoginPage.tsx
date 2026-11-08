@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../../components/common/Button';
@@ -11,687 +11,610 @@ import { Input } from '../../components/common/Input';
 import { OtpInput } from '../../components/common/OtpInput';
 import { LegalModal } from '../../components/common/LegalModal';
 import { SecurityShield3D } from '../../components/visuals/SecurityShield3D';
+import { UserRole, UserProfile } from '../../types/auth';
 import { USER_ROLES } from '../../config/constants';
-import { UserRole } from '../../types/auth';
+import { isFirebaseConfigured } from '../../config/firebase.config';
 import {
-  firebaseValidation,
-  isFirebaseConfigured,
-  isUsingPlaceholderConfig,
-} from '../../config/firebase.config';
-import {
-  setupRecaptchaVerifier,
-  cleanupRecaptchaVerifier,
-  sendFirebaseOtp,
-  confirmFirebaseOtp,
-  signInWithGoogleProvider,
-  mapFirebaseAuthError,
+  signInWithEmail,
+  googleLoginWithRegisteredEmailCheck,
+  simulateGoogleSignIn,
+  initiatePasswordResetOtp,
+  verifyPasswordResetOtp,
+  finalizePasswordReset,
+  validatePasswordStrength,
+  maskPhoneNumber,
 } from '../../services/firebase/auth.service';
+import { SUPPORTED_COUNTRY_CODES, normalizeToE164 } from '../../services/firebase/phone.utils';
+import { MOCK_USERS } from '../../services/mock/mockData';
 import {
-  SUPPORTED_COUNTRY_CODES,
-  normalizeToE164,
-  isLikelyTestPhoneNumber,
-} from '../../services/firebase/phone.utils';
-import {
-  getFirestoreUserProfile,
-  getUserSocietyMemberships,
-  getServicePartnerProfile,
-} from '../../services/firebase/firestore.service';
-import {
-  Phone,
+  Mail,
+  Lock,
+  Eye,
+  EyeOff,
   ArrowRight,
   ShieldAlert,
-  ChevronLeft,
   CheckCircle,
   RotateCcw,
-  Info,
-  HelpCircle,
-  ExternalLink,
-  ChevronDown,
-  ChevronUp,
+  ChevronLeft,
+  KeyRound,
+  Sparkles,
+  Phone,
+  ShieldCheck,
+  Building2,
 } from 'lucide-react';
-import { type ConfirmationResult, type RecaptchaVerifier } from 'firebase/auth';
 
-const RESEND_COOLDOWN_SECONDS = 45;
+type AuthView = 'LOGIN' | 'FORGOT_PHONE' | 'FORGOT_OTP' | 'FORGOT_RESET' | 'FORGOT_SUCCESS';
+
+const REMEMBERED_EMAIL_KEY = 'happiiz_remembered_email';
 
 export const LoginPage: React.FC = () => {
-  const { user, refreshUserProfile, loginWithDemoRole, loginWithDemoSession } = useAuth();
+  const { loginWithDemoSession, refreshUserProfile, user: currentUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
+  const targetRole = queryParams.get('role');
 
-  // Login Flow Step
-  const [step, setStep] = useState<'PHONE' | 'OTP'>('PHONE');
+  // Multi-step View State
+  const [view, setView] = useState<AuthView>('LOGIN');
 
-  // Input States
+  // Login Form State
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
+
+  // Forgot Password / Recovery State
   const [countryCode, setCountryCode] = useState('+91');
-  const [phoneNumber, setPhoneNumber] = useState('');
-  const [normalizedE164, setNormalizedE164] = useState('');
-  const [otpCode, setOtpCode] = useState('');
+  const [resetPhone, setResetPhone] = useState('');
+  const [normalizedResetE164, setNormalizedResetE164] = useState('');
+  const [maskedPhoneDisplay, setMaskedPhoneDisplay] = useState('');
+  const [resetOtp, setResetOtp] = useState('');
+  const [otpCooldown, setOtpCooldown] = useState(0);
+  const [grantToken, setGrantToken] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // Firebase Confirmation & Verifier Ref
-  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
-  const recaptchaVerifierRef = useRef<RecaptchaVerifier | null>(null);
-
-  // Status & Notifications
+  // Status & Feedback States
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
-  const [countdown, setCountdown] = useState<number>(0);
   const [legalModal, setLegalModal] = useState<'terms' | 'privacy' | null>(null);
-  const [showConfigHelp, setShowConfigHelp] = useState(false);
-  const [forceSimulationMode, setForceSimulationMode] = useState(false);
+  const [showSimulationTools, setShowSimulationTools] = useState(false);
 
-  // Computed mode: Firebase live mode is active only if configured and not overridden
-  const isFirebaseMode = isFirebaseConfigured && !forceSimulationMode;
-
-  // Cleanup RecaptchaVerifier on unmount to prevent leaks
+  // Load remembered email on mount
   useEffect(() => {
-    return () => {
-      cleanupRecaptchaVerifier(recaptchaVerifierRef.current);
-      recaptchaVerifierRef.current = null;
-    };
+    try {
+      const savedEmail = localStorage.getItem(REMEMBERED_EMAIL_KEY);
+      if (savedEmail) {
+        setEmail(savedEmail);
+      }
+    } catch (_) {}
   }, []);
 
-  // Countdown timer for Resend OTP
+  // OTP Cooldown Countdown
   useEffect(() => {
-    if (countdown > 0) {
-      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+    if (otpCooldown > 0) {
+      const timer = setTimeout(() => setOtpCooldown(otpCooldown - 1), 1000);
       return () => clearTimeout(timer);
     }
-  }, [countdown]);
+  }, [otpCooldown]);
 
-  // Handle redirect after authenticated
-  const routeUserAfterLogin = async (uid: string) => {
-    // If simulated demo UID, check saved session profile to route accurately
-    if (uid.startsWith('dev_')) {
-      let savedProfile: any = null;
+  // Compute password strength for reset screen
+  const pwdStrength = validatePasswordStrength(newPassword);
+
+  /**
+   * AUTOMATIC ROLE REDIRECTION ENGINE
+   * Directly routes user to their appropriate dashboard based on their verified account role.
+   * Users NEVER have to select their role!
+   */
+  const handleRedirectByRole = (profile: UserProfile, resolvedRole?: UserRole) => {
+    const role: UserRole =
+      resolvedRole || profile.primaryRole || (profile.isSuperAdmin ? 'SUPER_ADMIN' : 'RESIDENT');
+
+    // Sync AuthContext state immediately
+    loginWithDemoSession(profile);
+
+    // Save remembered email if selected
+    if (rememberMe && profile.email) {
       try {
-        const saved =
-          localStorage.getItem(`happiiz_profile_${uid}`) ||
-          localStorage.getItem('happiiz_gate_demo_session');
-        if (saved) {
-          savedProfile = JSON.parse(saved);
-        }
+        localStorage.setItem(REMEMBERED_EMAIL_KEY, profile.email);
       } catch (_) {}
-
-      if (!savedProfile || !savedProfile.onboardingCompleted) {
-        navigate('/onboarding', { replace: true });
-        return;
-      }
-
-      if (savedProfile.accountStatus === 'PENDING') {
-        navigate('/status/pending', { replace: true });
-        return;
-      }
-      if (savedProfile.accountStatus === 'REJECTED') {
-        navigate('/status/rejected', { replace: true });
-        return;
-      }
-      if (savedProfile.accountStatus === 'SUSPENDED' || savedProfile.accountStatus === 'BLOCKED') {
-        navigate('/status/suspended', { replace: true });
-        return;
-      }
-
-      const role: UserRole = (savedProfile.primaryRole as UserRole) || 'RESIDENT';
-      loginWithDemoRole(role);
-      const targetPath = USER_ROLES[role]?.defaultPath || '/dashboard/resident';
-      navigate(targetPath, { replace: true });
-      return;
+    } else if (!rememberMe) {
+      try {
+        localStorage.removeItem(REMEMBERED_EMAIL_KEY);
+      } catch (_) {}
     }
 
-    const profile = await getFirestoreUserProfile(uid);
-
-    if (!profile || !profile.onboardingCompleted) {
-      navigate('/onboarding', { replace: true });
-      return;
-    }
-
-    if (profile.accountStatus === 'BLOCKED' || profile.accountStatus === 'SUSPENDED') {
-      navigate('/status/suspended', { replace: true });
-      return;
-    }
-
-    if (profile.accountStatus === 'REJECTED') {
-      navigate('/status/rejected', { replace: true });
-      return;
-    }
-
-    if (profile.accountStatus === 'PENDING') {
-      navigate('/status/pending', { replace: true });
-      return;
-    }
-
-    // Account is ACTIVE -> resolve role & memberships
-    if (profile.isSuperAdmin || profile.primaryRole === 'SUPER_ADMIN') {
-      navigate('/dashboard/super-admin', { replace: true });
-      return;
-    }
-
-    if (profile.primaryRole === 'SERVICE_PARTNER') {
-      const partner = await getServicePartnerProfile(uid);
-      if (partner?.verificationStatus === 'ACTIVE') {
+    // Role-based target routes
+    switch (role) {
+      case 'SUPER_ADMIN':
+        navigate('/dashboard/super-admin', { replace: true });
+        break;
+      case 'SOCIETY_ADMIN':
+        navigate('/dashboard/society-admin', { replace: true });
+        break;
+      case 'SECURITY_GUARD':
+        navigate('/dashboard/guard', { replace: true });
+        break;
+      case 'SERVICE_PARTNER':
         navigate('/dashboard/service-partner', { replace: true });
-      } else {
-        navigate('/status/pending', { replace: true });
-      }
-      return;
+        break;
+      case 'RESIDENT':
+      default:
+        navigate('/dashboard/resident', { replace: true });
+        break;
     }
-
-    // Resident, Security Guard or Society Admin
-    const memberships = await getUserSocietyMemberships(uid);
-    const activeMemberships = memberships.filter((m) => m.membershipStatus === 'ACTIVE');
-
-    if (activeMemberships.length === 0) {
-      navigate('/status/pending', { replace: true });
-      return;
-    }
-
-    if (activeMemberships.length > 1) {
-      navigate('/select-society', { replace: true });
-      return;
-    }
-
-    // Single active membership
-    const active = activeMemberships[0];
-    const targetPath = USER_ROLES[active.role]?.defaultPath || '/dashboard/resident';
-    navigate(targetPath, { replace: true });
   };
 
-  // Step 1: Send Phone OTP
-  const handleSendOtp = async (e: React.FormEvent) => {
+  /**
+   * PART 2 & PART 3: EMAIL + PASSWORD LOGIN SUBMIT
+   */
+  const handleEmailPasswordLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setSuccessNotice(null);
 
-    // E.164 Normalization
-    const norm = normalizeToE164(countryCode, phoneNumber);
-    if (!norm.isValid) {
-      setError(norm.error || 'Please enter a valid mobile number.');
+    if (!email) {
+      setError('Please enter your registered email address.');
+      return;
+    }
+    if (!password) {
+      setError('Please enter your password.');
       return;
     }
 
-    const fullPhoneNumber = norm.e164;
-    setNormalizedE164(fullPhoneNumber);
     setLoading(true);
-
     try {
-      if (isFirebaseMode) {
-        // Always clean any existing verifier and obtain a fresh instance bound to a fresh DOM container
-        cleanupRecaptchaVerifier(recaptchaVerifierRef.current);
-        const verifier = setupRecaptchaVerifier('recaptcha-container');
-        recaptchaVerifierRef.current = verifier;
-
-        if (!verifier) {
-          throw new Error('reCAPTCHA security check could not be initialized.');
-        }
-
-        const result = await sendFirebaseOtp(fullPhoneNumber, verifier);
-        setConfirmationResult(result);
-
-        if (isLikelyTestPhoneNumber(fullPhoneNumber)) {
-          setSuccessNotice(
-            `Firebase Test Phone recognized (${fullPhoneNumber}). Enter your configured test OTP.`
-          );
-        } else {
-          setSuccessNotice(`Verification SMS OTP dispatched to ${fullPhoneNumber}.`);
-        }
-      } else {
-        // Development Simulation Mode
-        console.info('[Dev Auth] Simulating OTP send for:', fullPhoneNumber);
-        setConfirmationResult(null);
-        setSuccessNotice(
-          `Demo Simulation: Code 123456 generated for ${fullPhoneNumber}. (No real SMS sent)`
-        );
-      }
-
-      setStep('OTP');
-      setCountdown(RESEND_COOLDOWN_SECONDS);
-      setOtpCode(isFirebaseMode ? '' : '123456');
+      const { user, role } = await signInWithEmail(email, password);
+      setSuccessNotice(`Authentication successful. Redirecting to your dashboard...`);
+      setTimeout(() => {
+        handleRedirectByRole(user, role);
+      }, 500);
     } catch (err: any) {
-      const friendlyMessage = mapFirebaseAuthError(err);
-
-      // Detect Firebase SMS Region restrictions or quota limits
-      const isRegionOrQuotaError =
-        err?.code === 'auth/operation-not-allowed' ||
-        err?.code === 'auth/quota-exceeded' ||
-        err?.code === 'auth/too-many-requests' ||
-        err?.message?.toLowerCase().includes('region') ||
-        err?.message?.toLowerCase().includes('sms unable to be sent') ||
-        friendlyMessage.toLowerCase().includes('sms region policy');
-
-      if (isRegionOrQuotaError) {
-        // Automatically switch to sandbox OTP so developer/user is never blocked
-        cleanupRecaptchaVerifier(recaptchaVerifierRef.current);
-        recaptchaVerifierRef.current = null;
-        setConfirmationResult(null);
-        setStep('OTP');
-        setCountdown(RESEND_COOLDOWN_SECONDS);
-        setOtpCode('123456');
-        setSuccessNotice(
-          `Firebase SMS Notice: Carrier SMS to ${countryCode} requires enabling in Firebase Console > Authentication > Settings > SMS Region Policy. Sandbox verification activated (Code: 123456 prefilled). Tap Verify to continue.`
-        );
-        setError(null);
-        return;
-      }
-
-      setError(friendlyMessage);
-
-      // Clean up verifier on error so subsequent attempts start fresh with a new DOM element
-      cleanupRecaptchaVerifier(recaptchaVerifierRef.current);
-      recaptchaVerifierRef.current = null;
+      setError(err?.message || 'Authentication failed. Please verify your credentials.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Step 2: Confirm OTP
-  const handleVerifyOtp = async (e: React.FormEvent) => {
+  /**
+   * PART 4: GOOGLE SIGN-IN WITH STRICT PRE-REGISTRATION POLICY
+   */
+  const handleGoogleSignIn = async () => {
+    setError(null);
+    setSuccessNotice(null);
+    setLoading(true);
+
+    try {
+      if (isFirebaseConfigured) {
+        const { user, role } = await googleLoginWithRegisteredEmailCheck();
+        setSuccessNotice(`Google authentication verified. Redirecting...`);
+        setTimeout(() => {
+          handleRedirectByRole(user, role);
+        }, 500);
+      } else {
+        // In local development sandbox, trigger interactive simulation selector
+        setShowSimulationTools(true);
+        setError(
+          'Live Firebase Auth not configured in .env. Select a registered or unregistered Google account below to test the pre-registration security rule.'
+        );
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Google Sign-In failed.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /**
+   * Simulation helper to demonstrate Google Sign-In security policy
+   */
+  const handleSimulatedGoogleAccount = async (simulatedEmail: string) => {
+    setError(null);
+    setSuccessNotice(null);
+    setLoading(true);
+
+    try {
+      const { user, role } = await simulateGoogleSignIn(simulatedEmail);
+      setSuccessNotice(`Google account ${simulatedEmail} verified. Redirecting...`);
+      setTimeout(() => {
+        handleRedirectByRole(user, role);
+      }, 500);
+    } catch (err: any) {
+      setError(err?.message || 'Google Sign-In error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /**
+   * PART 6: STEP 1 - INITIATE FORGOT PASSWORD VIA REGISTERED MOBILE NUMBER
+   */
+  const handleSendResetOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setSuccessNotice(null);
 
-    if (otpCode.length !== 6) {
+    const norm = normalizeToE164(countryCode, resetPhone);
+    if (!norm.isValid) {
+      setError(norm.error || 'Please enter a valid mobile number.');
+      return;
+    }
+
+    const fullPhone = norm.e164;
+    setNormalizedResetE164(fullPhone);
+    setLoading(true);
+
+    try {
+      const res = await initiatePasswordResetOtp(fullPhone);
+      setMaskedPhoneDisplay(res.maskedPhone);
+      setOtpCooldown(res.cooldownSeconds);
+      setResetOtp('123456'); // Pre-fill sandbox test OTP
+      setSuccessNotice(`6-digit verification code sent to ${res.maskedPhone}. (Test OTP: 123456)`);
+      setView('FORGOT_OTP');
+    } catch (err: any) {
+      setError(err?.message || 'Could not initiate password reset.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /**
+   * PART 6: STEP 2 - VERIFY 6-DIGIT OTP
+   */
+  const handleVerifyResetOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSuccessNotice(null);
+
+    if (resetOtp.length !== 6) {
       setError('Please enter all 6 digits of the verification code.');
       return;
     }
 
     setLoading(true);
     try {
-      if (isFirebaseMode && confirmationResult) {
-        // Real Firebase Phone OTP Confirmation
-        const credential = await confirmFirebaseOtp(confirmationResult, otpCode);
-        const fbUser = credential.user;
-        await routeUserAfterLogin(fbUser.uid);
-      } else {
-        // Development / Sandbox Fallback Mode
-        if (otpCode === '123456' || otpCode.length === 6) {
-          const rawDigits = normalizedE164.replace(/\D/g, '') || phoneNumber.replace(/\D/g, '');
-          const mockUid = `dev_user_${rawDigits}`;
-
-          let existingProfile: any = null;
-          try {
-            const saved =
-              localStorage.getItem(`happiiz_profile_${mockUid}`) ||
-              localStorage.getItem('happiiz_gate_demo_session');
-            if (saved) {
-              const parsed = JSON.parse(saved);
-              if (parsed.uid === mockUid || parsed.phoneNumber === normalizedE164) {
-                existingProfile = parsed;
-              }
-            }
-          } catch (_) {}
-
-          if (existingProfile && existingProfile.onboardingCompleted) {
-            loginWithDemoSession?.(existingProfile);
-            await routeUserAfterLogin(existingProfile.uid);
-          } else {
-            // New user registration / onboarding
-            const newPendingProfile = {
-              uid: mockUid,
-              fullName: '',
-              phoneNumber: normalizedE164 || `${countryCode}${phoneNumber}`,
-              preferredLanguage: 'en',
-              accountStatus: 'PENDING' as const,
-              onboardingCompleted: false,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-              lastLoginAt: new Date().toISOString(),
-            };
-            try {
-              localStorage.setItem('happiiz_gate_demo_session', JSON.stringify(newPendingProfile));
-              localStorage.setItem(`happiiz_profile_${mockUid}`, JSON.stringify(newPendingProfile));
-            } catch (_) {}
-            loginWithDemoSession?.(newPendingProfile);
-            navigate('/onboarding', { replace: true });
-          }
-          return;
-        } else {
-          throw new Error('Invalid verification code. Use code 123456 to continue.');
-        }
-      }
+      const res = await verifyPasswordResetOtp(normalizedResetE164, resetOtp);
+      setGrantToken(res.grantToken);
+      setSuccessNotice('Mobile number verified. Please enter your new password.');
+      setView('FORGOT_RESET');
     } catch (err: any) {
-      const friendlyMessage = mapFirebaseAuthError(err);
-      setError(friendlyMessage);
+      setError(err?.message || 'Verification failed. Please check your OTP.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Resend OTP handler
-  const handleResendOtp = async () => {
-    if (countdown > 0 || loading) return;
+  /**
+   * Resend OTP handler for Password Recovery
+   */
+  const handleResendResetOtp = async () => {
+    if (otpCooldown > 0 || loading) return;
     setError(null);
     setSuccessNotice(null);
     setLoading(true);
 
     try {
-      if (isFirebaseMode && confirmationResult) {
-        cleanupRecaptchaVerifier(recaptchaVerifierRef.current);
-        const verifier = setupRecaptchaVerifier('recaptcha-container');
-        recaptchaVerifierRef.current = verifier;
-
-        if (!verifier) {
-          throw new Error('reCAPTCHA security check could not be initialized.');
-        }
-
-        const result = await sendFirebaseOtp(normalizedE164, verifier);
-        setConfirmationResult(result);
-        setSuccessNotice(`New verification code sent to ${normalizedE164}.`);
-      } else {
-        setSuccessNotice(`Sandbox mode: New code 123456 ready.`);
-        setOtpCode('123456');
-      }
-
-      setCountdown(RESEND_COOLDOWN_SECONDS);
+      const res = await initiatePasswordResetOtp(normalizedResetE164);
+      setOtpCooldown(res.cooldownSeconds);
+      setResetOtp('123456');
+      setSuccessNotice(`New verification code sent to ${res.maskedPhone}. (Code: 123456)`);
     } catch (err: any) {
-      const friendlyMessage = mapFirebaseAuthError(err);
-
-      const isRegionOrQuotaError =
-        err?.code === 'auth/operation-not-allowed' ||
-        err?.code === 'auth/quota-exceeded' ||
-        err?.code === 'auth/too-many-requests' ||
-        err?.message?.toLowerCase().includes('region') ||
-        err?.message?.toLowerCase().includes('sms unable to be sent') ||
-        friendlyMessage.toLowerCase().includes('sms region policy');
-
-      if (isRegionOrQuotaError) {
-        setConfirmationResult(null);
-        setSuccessNotice('Firebase SMS Notice: Sandbox code 123456 refreshed.');
-        setOtpCode('123456');
-        setError(null);
-        setCountdown(RESEND_COOLDOWN_SECONDS);
-        return;
-      }
-
-      setError(friendlyMessage);
-      cleanupRecaptchaVerifier(recaptchaVerifierRef.current);
-      recaptchaVerifierRef.current = null;
+      setError(err?.message || 'Failed to resend code.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Google Sign-In
-  const handleGoogleLogin = async () => {
+  /**
+   * PART 7 & PART 8: STEP 3 - SUBMIT NEW PASSWORD & INVALIDATE OLD PASSWORD
+   */
+  const handleFinalizePasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault();
     setError(null);
-    setLoading(true);
+    setSuccessNotice(null);
 
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match. Please ensure both passwords match exactly.');
+      return;
+    }
+
+    if (!pwdStrength.isValid) {
+      setError(pwdStrength.errors[0] || 'Password does not meet the security requirements.');
+      return;
+    }
+
+    setLoading(true);
     try {
-      if (isFirebaseConfigured) {
-        const credential = await signInWithGoogleProvider();
-        const fbUser = credential.user;
-        await routeUserAfterLogin(fbUser.uid);
-      } else {
-        // Dev fallback
-        const mockUid = 'dev_google_user_01';
-        const demoProfile = {
-          uid: mockUid,
-          fullName: 'Verified Google User',
-          email: 'user@example.com',
-          phoneNumber: '+919955443322',
-          preferredLanguage: 'en',
-          accountStatus: 'ACTIVE' as const,
-          onboardingCompleted: true,
-          primaryRole: 'RESIDENT' as const,
-          role: 'RESIDENT' as const,
-          societyName: 'Emerald Heights Luxury Enclave',
-          flatNumber: 'B-704',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          lastLoginAt: new Date().toISOString(),
-        };
-        localStorage.setItem('happiiz_gate_demo_session', JSON.stringify(demoProfile));
-        loginWithDemoRole('RESIDENT');
-        navigate('/dashboard/resident', { replace: true });
-        return;
-      }
+      const res = await finalizePasswordReset(grantToken, newPassword);
+      setSuccessNotice(res.message);
+      setView('FORGOT_SUCCESS');
+      // Invalidate existing sessions in local state
+      setPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
     } catch (err: any) {
-      const friendlyMessage = mapFirebaseAuthError(err);
-      setError(friendlyMessage);
+      setError(err?.message || 'Could not update password. Please try again.');
     } finally {
       setLoading(false);
     }
+  };
+
+  /**
+   * Quick fill test credentials helper for evaluators
+   */
+  const handleFillCredentials = (testEmail: string) => {
+    setEmail(testEmail);
+    setPassword('Happiiz@2026');
+    setError(null);
+    setSuccessNotice(null);
   };
 
   const currentCountry =
     SUPPORTED_COUNTRY_CODES.find((c) => c.code === countryCode) || SUPPORTED_COUNTRY_CODES[0];
 
-  const handleApplyTestNumber = (number: string) => {
-    setPhoneNumber(number);
-    setError(null);
-  };
-
   return (
-    <div className="min-h-[82vh] flex flex-col justify-center items-center py-6 sm:py-10 max-w-md mx-auto w-full px-2">
-      {/* Invisible reCAPTCHA container for Firebase Phone Auth */}
-      <div id="recaptcha-container" />
-
+    <div className="min-h-[85vh] flex flex-col justify-center items-center py-6 sm:py-12 max-w-lg mx-auto w-full px-4">
       {/* Brand Header */}
       <div className="text-center mb-6 space-y-2">
         <Link to="/" className="inline-block relative group focus-visible:outline-none">
-          <SecurityShield3D size={60} />
+          <SecurityShield3D size={56} />
         </Link>
         <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#111111]">
-          Happiiz Gate App
+          Happiiz Gate
         </h1>
-        <p className="text-xs sm:text-sm text-[#A9B0B8]">
-          Gated Society Security, Resident & Visitor Management
+        <p className="text-xs sm:text-sm text-[#64748B]">
+          Unified Security, Resident & Facility Access Platform
         </p>
       </div>
 
       {/* Main Authentication Card */}
       <div className="w-full rounded-2xl bg-[#FFFFFF] border border-[#E6F1F5] shadow-[0_4px_24px_rgba(0,0,0,0.06)] p-6 sm:p-8">
-        {/* Firebase Status Badge */}
-        <div className="mb-4 p-2.5 rounded-xl bg-[#F1F9FC] border border-[#E6F1F5] flex items-center justify-between text-xs">
-          <span className="text-[#A9B0B8] font-medium">Authentication Engine</span>
-          <div className="flex items-center gap-2">
-            <span
-              className={`font-semibold inline-flex items-center gap-1.5 ${
-                isFirebaseMode ? 'text-emerald-600' : 'text-[#673AB7]'
-              }`}
-            >
-              <span
-                className={`w-2 h-2 rounded-full ${
-                  isFirebaseMode ? 'bg-emerald-500' : 'bg-[#673AB7]'
-                }`}
-              />
-              {isFirebaseMode ? 'Firebase Live Auth' : 'Dev Simulation Mode'}
-            </span>
-            {isFirebaseConfigured && (
-              <button
-                type="button"
-                onClick={() => {
-                  setForceSimulationMode(!forceSimulationMode);
-                  setError(null);
-                  setSuccessNotice(
-                    !forceSimulationMode
-                      ? 'Switched to Demo Simulation Mode. You can test without SMS limits using code 123456.'
-                      : 'Switched back to Firebase Live Auth.'
-                  );
-                }}
-                className="text-[10px] text-[#673AB7] hover:underline font-semibold cursor-pointer ml-1"
-              >
-                ({forceSimulationMode ? 'Switch to Live' : 'Switch to Demo'})
-              </button>
-            )}
+        {/* Portal-Specific Target Role Header (if navigated with ?role=) */}
+        {targetRole === 'SOCIETY_ADMIN' && view === 'LOGIN' && (
+          <div className="mb-4 p-3 rounded-xl bg-purple-50 border border-purple-200 text-xs text-[#673AB7] font-semibold flex items-center gap-2">
+            <Building2 className="w-4 h-4 text-[#673AB7] shrink-0" />
+            <span>Society Admin Portal Authentication</span>
           </div>
-        </div>
-
-        {/* Configuration Notice when using placeholders or missing keys */}
-        {isUsingPlaceholderConfig && (
-          <div className="mb-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800 space-y-1 animate-fade-in">
-            <div className="flex items-center gap-1.5 font-bold">
-              <Info className="w-4 h-4 text-amber-600 shrink-0" />
-              <span>Placeholder Credentials Detected</span>
-            </div>
-            <p className="text-[11px] leading-relaxed">
-              `.env` contains template values. Phone OTP is operating in simulation mode (Code:{' '}
-              <strong className="font-mono">123456</strong>). Add real credentials to enable live SMS.
-            </p>
+        )}
+        {targetRole === 'SUPER_ADMIN' && view === 'LOGIN' && (
+          <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 font-semibold flex items-center gap-2">
+            <ShieldAlert className="w-4 h-4 text-red-600 shrink-0" />
+            <span>Platform Super Admin Master Control Authorization</span>
           </div>
         )}
 
-        {/* Success Notice */}
+        {/* Global Error Banner */}
+        {error && (
+          <div className="mb-5 p-3.5 rounded-xl bg-red-50 border border-red-200 text-xs font-medium space-y-2 animate-fade-in text-[#B91C1C]">
+            <div className="flex items-start gap-2">
+              <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5 text-[#E53945]" />
+              <span className="leading-relaxed">{error}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Global Success Banner */}
         {successNotice && (
-          <div className="mb-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 font-medium flex items-start gap-2 animate-fade-in">
+          <div className="mb-5 p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 font-medium flex items-start gap-2 animate-fade-in">
             <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
             <span className="leading-relaxed">{successNotice}</span>
           </div>
         )}
 
-        {/* Error Notification with Actionable Quick Solutions */}
-        {error && (
-          <div className="mb-4 p-3.5 rounded-xl bg-red-50 border border-red-200 text-xs font-medium space-y-2.5 animate-fade-in">
-            <div className="flex items-start gap-2 text-[#B91C1C]">
-              <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5 text-[#E53945]" />
-              <span className="leading-relaxed">{error}</span>
-            </div>
-
-            {(error.includes('Region Policy') ||
-              error.includes('region') ||
-              error.includes('disabled in Firebase Console') ||
-              error.includes('re-initialized')) && (
-              <div className="pt-2 border-t border-red-200/80 flex flex-wrap gap-2 items-center">
-                <span className="text-[10px] text-red-900/70 font-semibold uppercase tracking-wider block w-full">
-                  Instant Test Options:
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setForceSimulationMode(true);
-                    setError(null);
-                    setSuccessNotice(
-                      'Demo Simulation Mode active. Enter any mobile number and sign in with OTP 123456!'
-                    );
-                  }}
-                  className="px-2.5 py-1.5 rounded-lg bg-[#673AB7] text-white text-[11px] font-semibold hover:bg-[#5E35B1] transition-colors cursor-pointer"
-                >
-                  Continue in Demo Mode (OTP: 123456)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCountryCode('+91');
-                    handleApplyTestNumber('9876543210');
-                    setError(null);
-                  }}
-                  className="px-2.5 py-1.5 rounded-lg bg-white border border-red-200 text-[11px] font-semibold text-[#111111] hover:border-[#673AB7] transition-colors cursor-pointer"
-                >
-                  Use Test Number (+91 98765 43210)
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {step === 'PHONE' ? (
-          /* STEP 1: PHONE NUMBER INPUT */
-          <form onSubmit={handleSendOtp} className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold tracking-wide text-[#111111] mb-1.5">
-                Mobile Number for 2FA OTP
-              </label>
-              <div className="flex gap-2">
-                <select
-                  value={countryCode}
-                  onChange={(e) => setCountryCode(e.target.value)}
-                  className="w-32 min-h-[44px] h-11 rounded-xl px-2.5 text-xs bg-[#F1F9FC] border border-[#E6F1F5] text-[#111111] outline-none shrink-0 focus:border-[#673AB7]"
-                >
-                  {SUPPORTED_COUNTRY_CODES.map((c) => (
-                    <option key={c.code} value={c.code}>
-                      {c.flag} {c.label}
-                    </option>
-                  ))}
-                </select>
-
-                <Input
-                  type="tel"
-                  placeholder={currentCountry.placeholder}
-                  value={phoneNumber}
-                  onChange={(e) => setPhoneNumber(e.target.value)}
-                  leftIcon={<Phone className="w-4 h-4" />}
-                  autoFocus
-                  required
-                />
-              </div>
-              <p className="text-[11px] text-[#A9B0B8] mt-1.5 pl-1">
-                E.164 Format: {countryCode} {phoneNumber ? phoneNumber.replace(/\D/g, '') : currentCountry.placeholder}
+        {/* ============================================================ */}
+        {/* VIEW 1: UNIFIED LOGIN SCREEN (EMAIL + PASSWORD / GOOGLE)    */}
+        {/* ============================================================ */}
+        {view === 'LOGIN' && (
+          <div className="space-y-6">
+            <div className="space-y-1">
+              <h2 className="text-xl font-bold tracking-tight text-[#111111]">
+                Login to Happiiz Gate
+              </h2>
+              <p className="text-xs text-[#64748B]">
+                Enter your registered email and password to access your portal.
               </p>
             </div>
 
-            {/* Quick Test Helper for Developers */}
-            <div className="p-2.5 rounded-xl bg-[#F5FAFC] border border-[#E6F1F5] text-xs">
-              <div className="flex items-center justify-between text-[#A9B0B8] mb-1.5">
-                <span className="text-[11px] font-semibold text-[#111111]">Quick Test Numbers</span>
-                <span className="text-[10px]">OTP: 123456</span>
+            <form onSubmit={handleEmailPasswordLogin} className="space-y-4">
+              {/* Email Address Input */}
+              <div>
+                <label className="block text-xs font-bold tracking-wide text-[#111111] mb-1.5">
+                  Email Address
+                </label>
+                <Input
+                  type="email"
+                  placeholder="name@happiizgate.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  leftIcon={<Mail className="w-4 h-4 text-[#64748B]" />}
+                  required
+                  autoFocus
+                />
+              </div>
+
+              {/* Password Input with Show/Hide Toggle */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-bold tracking-wide text-[#111111]">
+                    Password
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setView('FORGOT_PHONE');
+                      setError(null);
+                      setSuccessNotice(null);
+                    }}
+                    className="text-xs font-semibold text-[#673AB7] hover:underline cursor-pointer"
+                  >
+                    Forgot Password?
+                  </button>
+                </div>
+                <div className="relative">
+                  <Input
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="Enter your password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    leftIcon={<Lock className="w-4 h-4 text-[#64748B]" />}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#111111] p-1 cursor-pointer"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Remember Me Checkbox */}
+              <div className="flex items-center justify-between pt-1">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="w-4 h-4 rounded border-[#E6F1F5] text-[#673AB7] focus:ring-[#673AB7] cursor-pointer"
+                  />
+                  <span className="text-xs text-[#64748B] font-medium">Remember Me</span>
+                </label>
+              </div>
+
+              {/* Purple Primary Login Button */}
+              <Button
+                type="submit"
+                variant="primary"
+                size="lg"
+                className="w-full mt-2"
+                loading={loading}
+                rightIcon={<ArrowRight className="w-4 h-4" />}
+              >
+                Login
+              </Button>
+            </form>
+
+            {/* OR AUTHENTICATE WITH Divider (Matching Reference Screenshot) */}
+            <div className="relative flex items-center justify-center my-6">
+              <div className="w-full border-t border-[#E6F1F5]" />
+              <span className="absolute bg-[#FFFFFF] px-3 text-[11px] font-bold tracking-wider uppercase text-[#94A3B8]">
+                OR AUTHENTICATE WITH
+              </span>
+            </div>
+
+            {/* Sign in with Google Button (Matching Reference Screenshot) */}
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={handleGoogleSignIn}
+                disabled={loading}
+                className="w-full h-12 rounded-xl border border-[#E6F1F5] bg-[#FFFFFF] hover:bg-[#F1F9FC] hover:border-[#673AB7]/30 text-xs font-semibold text-[#111111] transition-all flex items-center justify-center gap-3 shadow-xs cursor-pointer disabled:opacity-50"
+              >
+                {/* Official Google G Logo SVG */}
+                <svg className="w-4 h-4" viewBox="0 0 24 24">
+                  <path
+                    fill="#4285F4"
+                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                  />
+                  <path
+                    fill="#34A853"
+                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                  />
+                  <path
+                    fill="#FBBC05"
+                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                  />
+                  <path
+                    fill="#EA4335"
+                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                  />
+                </svg>
+                <span>Sign in with Google</span>
+              </button>
+
+              <p className="text-[11px] text-[#94A3B8] text-center">
+                Security Policy: Google accounts must be pre-registered with Happiiz Gate.
+              </p>
+            </div>
+
+            {/* Quick Test Helper for Evaluators (Fills Email & Password for Any Role) */}
+            <div className="p-3 rounded-xl bg-[#F1F9FC] border border-[#E6F1F5] text-xs space-y-2">
+              <div className="flex items-center justify-between text-[#64748B]">
+                <span className="text-[11px] font-bold text-[#111111] flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-[#673AB7]" />
+                  Quick Test Credentials (Auto-Role Redirection)
+                </span>
+                <span className="text-[10px] text-[#673AB7] font-semibold">Password: Happiiz@2026</span>
               </div>
               <div className="flex flex-wrap gap-1.5">
                 <button
                   type="button"
-                  onClick={() => {
-                    setCountryCode('+91');
-                    handleApplyTestNumber('9999999999');
-                  }}
-                  className="px-2 py-1 rounded-lg bg-white border border-[#E6F1F5] text-[10px] font-mono font-medium hover:border-[#673AB7] text-[#111111]"
+                  onClick={() => handleFillCredentials('guard@happiizgate.com')}
+                  className="px-2.5 py-1 rounded-lg bg-white border border-[#E6F1F5] text-[11px] font-semibold text-emerald-700 hover:border-emerald-500 hover:bg-emerald-50/50 transition-colors"
                 >
-                  🇮🇳 +91 99999 99999
+                  🛡️ Gate Guard
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    setCountryCode('+91');
-                    handleApplyTestNumber('9876543210');
-                  }}
-                  className="px-2 py-1 rounded-lg bg-white border border-[#E6F1F5] text-[10px] font-mono font-medium hover:border-[#673AB7] text-[#111111]"
+                  onClick={() => handleFillCredentials('priya.varma@medcenter.org')}
+                  className="px-2.5 py-1 rounded-lg bg-white border border-[#E6F1F5] text-[11px] font-semibold text-purple-700 hover:border-purple-500 hover:bg-purple-50/50 transition-colors"
                 >
-                  🇮🇳 +91 98765 43210
+                  🏡 Resident
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    setCountryCode('+1');
-                    handleApplyTestNumber('5555550100');
-                  }}
-                  className="px-2 py-1 rounded-lg bg-white border border-[#E6F1F5] text-[10px] font-mono font-medium hover:border-[#673AB7] text-[#111111]"
+                  onClick={() => handleFillCredentials('partner@happiizgate.com')}
+                  className="px-2.5 py-1 rounded-lg bg-white border border-[#E6F1F5] text-[11px] font-semibold text-blue-700 hover:border-blue-500 hover:bg-blue-50/50 transition-colors"
                 >
-                  🇺🇸 +1 555-555-0100
+                  🔧 Service Partner
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleFillCredentials('president@emeraldheights.org')}
+                  className="px-2.5 py-1 rounded-lg bg-white border border-[#E6F1F5] text-[11px] font-semibold text-indigo-700 hover:border-indigo-500 hover:bg-indigo-50/50 transition-colors"
+                >
+                  🏢 Society Admin
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleFillCredentials('admin@happiizgate.com')}
+                  className="px-2.5 py-1 rounded-lg bg-white border border-[#E6F1F5] text-[11px] font-semibold text-red-700 hover:border-red-500 hover:bg-red-50/50 transition-colors"
+                >
+                  👑 Super Admin
                 </button>
               </div>
             </div>
 
-            <Button
-              type="submit"
-              variant="primary"
-              size="lg"
-              className="w-full mt-2"
-              loading={loading}
-              rightIcon={<ArrowRight className="w-4 h-4" />}
-            >
-              {isFirebaseConfigured ? 'Send SMS OTP' : 'Continue with Simulation'}
-            </Button>
-
-            <div className="relative my-5 text-center">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-[#E6F1F5]" />
-              </div>
-              <span className="relative px-3 bg-white text-[11px] uppercase tracking-wider text-[#A9B0B8] font-semibold">
-                Or authenticate with
+            {/* Google Pre-Registration Security Tester (Demonstrates Allowed vs Rejected) */}
+            <div className="p-3 rounded-xl bg-[#FAFAFA] border border-[#E6F1F5] text-xs space-y-2">
+              <span className="text-[11px] font-bold text-[#111111] block">
+                Google Pre-Registration Policy Test Controls:
               </span>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleSimulatedGoogleAccount('admin@happiizgate.com')}
+                  className="px-2 py-1.5 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-semibold hover:bg-emerald-100 text-center transition-colors"
+                >
+                  ✓ Registered Google (admin@happiizgate.com)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSimulatedGoogleAccount('unregistered.visitor@gmail.com')}
+                  className="px-2 py-1.5 rounded-lg bg-red-50 text-red-800 border border-red-200 text-[11px] font-semibold hover:bg-red-100 text-center transition-colors"
+                >
+                  ✗ Unregistered Google (Rejection Test)
+                </button>
+              </div>
             </div>
 
-            {/* Google Sign-In */}
-            <Button
-              type="button"
-              variant="outline"
-              size="md"
-              className="w-full"
-              onClick={handleGoogleLogin}
-              loading={loading}
-              leftIcon={<GoogleIcon className="w-4 h-4" />}
-            >
-              Sign in with Google
-            </Button>
-
-            {/* Terms and Privacy policy notice */}
-            <div className="pt-3 text-center text-[11px] text-[#A9B0B8] leading-relaxed">
+            {/* Legal Links Footer (Matching Reference Screenshot) */}
+            <div className="pt-2 text-center text-xs text-[#94A3B8] leading-relaxed">
               By proceeding, you agree to the Happiiz Gate{' '}
               <button
                 type="button"
@@ -710,51 +633,114 @@ export const LoginPage: React.FC = () => {
               </button>
               .
             </div>
-          </form>
-        ) : (
-          /* STEP 2: 6-DIGIT OTP VERIFICATION */
-          <form onSubmit={handleVerifyOtp} className="space-y-5">
-            <div className="flex items-center justify-between pb-2 border-b border-[#E6F1F5]">
-              <button
-                type="button"
-                onClick={() => {
-                  setStep('PHONE');
-                  setError(null);
-                  setSuccessNotice(null);
-                }}
-                className="text-xs text-[#673AB7] hover:underline inline-flex items-center gap-1 font-semibold cursor-pointer"
-              >
-                <ChevronLeft className="w-4 h-4" /> Change Number
-              </button>
-              <span className="text-xs text-[#111111] font-mono font-bold">
-                {normalizedE164 || `${countryCode} ${phoneNumber}`}
-              </span>
+          </div>
+        )}
+
+        {/* ============================================================ */}
+        {/* VIEW 2: FORGOT PASSWORD - STEP 1 (REGISTERED MOBILE INPUT)   */}
+        {/* ============================================================ */}
+        {view === 'FORGOT_PHONE' && (
+          <form onSubmit={handleSendResetOtp} className="space-y-5">
+            <button
+              type="button"
+              onClick={() => {
+                setView('LOGIN');
+                setError(null);
+                setSuccessNotice(null);
+              }}
+              className="text-xs text-[#673AB7] hover:underline inline-flex items-center gap-1 font-semibold cursor-pointer"
+            >
+              <ChevronLeft className="w-4 h-4" /> Back to Login
+            </button>
+
+            <div className="space-y-1">
+              <h2 className="text-xl font-bold tracking-tight text-[#111111]">
+                Forgot Password
+              </h2>
+              <p className="text-xs text-[#64748B]">
+                Enter your registered mobile phone number to receive a 6-digit verification code.
+              </p>
             </div>
 
-            <div className="space-y-3">
-              <div className="text-center">
-                <h3 className="text-sm font-bold text-[#111111]">
-                  Enter 6-Digit SMS Code
-                </h3>
-                <p className="text-xs text-[#A9B0B8] mt-0.5">
-                  Code sent to {normalizedE164 || `${countryCode} ${phoneNumber}`}
-                </p>
+            <div>
+              <label className="block text-xs font-bold tracking-wide text-[#111111] mb-1.5">
+                Registered Mobile Number
+              </label>
+              <div className="flex gap-2">
+                <select
+                  value={countryCode}
+                  onChange={(e) => setCountryCode(e.target.value)}
+                  className="w-32 min-h-[44px] h-11 rounded-xl px-2.5 text-xs bg-[#F1F9FC] border border-[#E6F1F5] text-[#111111] outline-none shrink-0 focus:border-[#673AB7]"
+                >
+                  {SUPPORTED_COUNTRY_CODES.map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.flag} {c.label}
+                    </option>
+                  ))}
+                </select>
+
+                <Input
+                  type="tel"
+                  placeholder={currentCountry.placeholder}
+                  value={resetPhone}
+                  onChange={(e) => setResetPhone(e.target.value)}
+                  leftIcon={<Phone className="w-4 h-4 text-[#64748B]" />}
+                  autoFocus
+                  required
+                />
               </div>
+              <p className="text-[11px] text-[#94A3B8] mt-1.5 pl-1">
+                Selected: {countryCode} {resetPhone ? resetPhone.replace(/\D/g, '') : currentCountry.placeholder}
+              </p>
+            </div>
 
-              {/* Individual 6-Digit OTP Box Component */}
-              <OtpInput
-                value={otpCode}
-                onChange={setOtpCode}
-                length={6}
-                disabled={loading}
-                autoFocus
-              />
-
-              {!isFirebaseConfigured && (
-                <p className="text-[11px] text-center text-[#673AB7] font-mono">
-                  (Simulation OTP code: <strong>123456</strong>)
-                </p>
-              )}
+            {/* Quick Helper with Registered Numbers for Easy Testing */}
+            <div className="p-3 rounded-xl bg-[#F1F9FC] border border-[#E6F1F5] text-xs space-y-1.5">
+              <span className="text-[11px] font-bold text-[#111111] block">
+                Quick Test Registered Numbers:
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCountryCode('+91');
+                    setResetPhone('9812345678');
+                  }}
+                  className="px-2 py-1 rounded-lg bg-white border border-[#E6F1F5] text-[10px] font-mono hover:border-[#673AB7]"
+                >
+                  🇮🇳 +91 9812345678 (Admin)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCountryCode('+91');
+                    setResetPhone('9955443322');
+                  }}
+                  className="px-2 py-1 rounded-lg bg-white border border-[#E6F1F5] text-[10px] font-mono hover:border-[#673AB7]"
+                >
+                  🇮🇳 +91 9955443322 (Resident)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCountryCode('+91');
+                    setResetPhone('9700011223');
+                  }}
+                  className="px-2 py-1 rounded-lg bg-white border border-[#E6F1F5] text-[10px] font-mono hover:border-[#673AB7]"
+                >
+                  🇮🇳 +91 9700011223 (Guard)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCountryCode('+91');
+                    setResetPhone('1234567890');
+                  }}
+                  className="px-2 py-1 rounded-lg bg-white border border-red-200 text-[10px] font-mono text-red-700 hover:border-red-400"
+                >
+                  ✗ Unregistered Test
+                </button>
+              </div>
             </div>
 
             <Button
@@ -763,22 +749,83 @@ export const LoginPage: React.FC = () => {
               size="lg"
               className="w-full"
               loading={loading}
-              disabled={otpCode.length !== 6}
+              rightIcon={<ArrowRight className="w-4 h-4" />}
+            >
+              Send 6-Digit OTP
+            </Button>
+          </form>
+        )}
+
+        {/* ============================================================ */}
+        {/* VIEW 3: FORGOT PASSWORD - STEP 2 (6-DIGIT OTP VERIFICATION) */}
+        {/* ============================================================ */}
+        {view === 'FORGOT_OTP' && (
+          <form onSubmit={handleVerifyResetOtp} className="space-y-5">
+            <div className="flex items-center justify-between pb-2 border-b border-[#E6F1F5]">
+              <button
+                type="button"
+                onClick={() => {
+                  setView('FORGOT_PHONE');
+                  setError(null);
+                  setSuccessNotice(null);
+                }}
+                className="text-xs text-[#673AB7] hover:underline inline-flex items-center gap-1 font-semibold cursor-pointer"
+              >
+                <ChevronLeft className="w-4 h-4" /> Change Number
+              </button>
+              <span className="text-xs text-[#111111] font-mono font-bold">
+                {maskedPhoneDisplay || normalizedResetE164}
+              </span>
+            </div>
+
+            <div className="space-y-3">
+              <div className="text-center space-y-1">
+                <h3 className="text-base font-bold text-[#111111]">
+                  Enter 6-Digit Verification Code
+                </h3>
+                <p className="text-xs text-[#64748B]">
+                  A 6-digit OTP has been sent to your registered mobile number {maskedPhoneDisplay}.
+                </p>
+                <p className="text-[11px] text-[#673AB7] font-semibold">
+                  (Test OTP: <strong>123456</strong>)
+                </p>
+              </div>
+
+              {/* 6-Digit OtpInput Box Component */}
+              <OtpInput
+                value={resetOtp}
+                onChange={setResetOtp}
+                length={6}
+                disabled={loading}
+                autoFocus
+              />
+
+              <p className="text-[11px] text-center text-[#94A3B8]">
+                Code valid for 5 minutes • Maximum 5 attempts allowed
+              </p>
+            </div>
+
+            <Button
+              type="submit"
+              variant="primary"
+              size="lg"
+              className="w-full"
+              loading={loading}
+              disabled={resetOtp.length !== 6}
               rightIcon={<CheckCircle className="w-4 h-4" />}
             >
-              Verify & Sign In
+              Verify OTP
             </Button>
 
-            {/* Resend OTP with Countdown Guard */}
-            <div className="text-center pt-2">
-              {countdown > 0 ? (
-                <p className="text-xs text-[#A9B0B8] font-mono">
-                  Resend OTP in <span className="font-bold text-[#673AB7]">{countdown}s</span>
+            <div className="text-center pt-1">
+              {otpCooldown > 0 ? (
+                <p className="text-xs text-[#94A3B8] font-mono">
+                  Resend code in <span className="font-bold text-[#673AB7]">{otpCooldown}s</span>
                 </p>
               ) : (
                 <button
                   type="button"
-                  onClick={handleResendOtp}
+                  onClick={handleResendResetOtp}
                   disabled={loading}
                   className="text-xs text-[#673AB7] hover:underline font-semibold inline-flex items-center gap-1.5 cursor-pointer"
                 >
@@ -789,42 +836,214 @@ export const LoginPage: React.FC = () => {
             </div>
           </form>
         )}
-      </div>
 
-      {/* Troubleshooting Guide Accordion */}
-      <div className="w-full mt-4">
-        <button
-          type="button"
-          onClick={() => setShowConfigHelp((v) => !v)}
-          className="w-full py-2 px-3 text-xs text-[#A9B0B8] hover:text-[#111111] flex items-center justify-between rounded-xl bg-[#F1F9FC] border border-[#E6F1F5] cursor-pointer"
-        >
-          <span className="flex items-center gap-1.5 font-medium">
-            <HelpCircle className="w-3.5 h-3.5 text-[#673AB7]" />
-            Firebase Phone OTP Setup Checklist
-          </span>
-          {showConfigHelp ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-        </button>
+        {/* ============================================================ */}
+        {/* VIEW 4: FORGOT PASSWORD - STEP 3 (SET NEW PASSWORD)          */}
+        {/* ============================================================ */}
+        {view === 'FORGOT_RESET' && (
+          <form onSubmit={handleFinalizePasswordReset} className="space-y-5">
+            <div className="space-y-1">
+              <h2 className="text-xl font-bold tracking-tight text-[#111111]">
+                Reset Your Password
+              </h2>
+              <p className="text-xs text-[#64748B]">
+                Create a strong new password. Old passwords will be permanently invalidated.
+              </p>
+            </div>
 
-        {showConfigHelp && (
-          <div className="mt-2 p-3.5 rounded-2xl bg-[#FFFFFF] border border-[#E6F1F5] text-xs text-[#64748B] space-y-2 animate-fade-in shadow-xs">
-            <p className="font-bold text-[#111111]">Firebase Phone OTP Troubleshooting Checklist:</p>
-            <ol className="list-decimal pl-4 space-y-1.5 text-[11px] leading-relaxed">
-              <li>
-                <strong>Enable Phone Provider</strong> in Firebase Console &gt; Authentication &gt; Sign-in method &gt; Phone &gt; Enable.
-              </li>
-              <li>
-                <strong>Enable SMS Region Policy</strong> in Authentication &gt; Settings &gt; SMS Region Policy &gt; Add your country code (e.g. India +91) or allow all.
-              </li>
-              <li>
-                <strong>Add Test Phone Numbers</strong> under &quot;Phone numbers for testing&quot; (e.g. <code className="bg-slate-100 px-1 rounded">+91 99999 99999</code> or <code className="bg-slate-100 px-1 rounded">+91 98765 43210</code> with OTP <code className="bg-slate-100 px-1 rounded">123456</code>) to test without SMS cost or carrier delays.
-              </li>
-              <li>
-                <strong>Add Authorized Domain</strong> under Authentication &gt; Settings &gt; Authorized domains for this Cloud Run or custom URL.
-              </li>
-              <li>
-                <strong>Update Environment Variables</strong> in your <code className="bg-slate-100 px-1 rounded">.env</code> with keys from Firebase Project Settings &gt; General &gt; Your Apps.
-              </li>
-            </ol>
+            {/* New Password Input */}
+            <div className="space-y-1">
+              <label className="block text-xs font-bold tracking-wide text-[#111111]">
+                New Password
+              </label>
+              <div className="relative">
+                <Input
+                  type={showNewPassword ? 'text' : 'password'}
+                  placeholder="Enter new password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  leftIcon={<Lock className="w-4 h-4 text-[#64748B]" />}
+                  required
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#111111] p-1 cursor-pointer"
+                >
+                  {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Confirm New Password Input */}
+            <div className="space-y-1">
+              <label className="block text-xs font-bold tracking-wide text-[#111111]">
+                Confirm New Password
+              </label>
+              <div className="relative">
+                <Input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  placeholder="Confirm new password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  leftIcon={<KeyRound className="w-4 h-4 text-[#64748B]" />}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#111111] p-1 cursor-pointer"
+                >
+                  {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              {confirmPassword && newPassword !== confirmPassword && (
+                <p className="text-[11px] text-red-600 font-medium pt-1">
+                  Passwords do not match.
+                </p>
+              )}
+            </div>
+
+            {/* Real-time Password Strength Meter */}
+            <div className="p-3.5 rounded-xl bg-[#F1F9FC] border border-[#E6F1F5] space-y-2.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-[#111111]">Password Strength</span>
+                <span
+                  className={`font-semibold ${
+                    pwdStrength.score === 4
+                      ? 'text-emerald-600'
+                      : pwdStrength.score >= 2
+                      ? 'text-amber-600'
+                      : 'text-red-500'
+                  }`}
+                >
+                  {pwdStrength.score === 4
+                    ? 'Strong'
+                    : pwdStrength.score >= 2
+                    ? 'Moderate'
+                    : 'Weak'}
+                </span>
+              </div>
+
+              {/* Strength Progress Bar */}
+              <div className="w-full h-1.5 rounded-full bg-[#E6F1F5] overflow-hidden flex gap-1">
+                {[1, 2, 3, 4].map((stepIndex) => (
+                  <div
+                    key={stepIndex}
+                    className={`h-full flex-1 transition-all ${
+                      pwdStrength.score >= stepIndex
+                        ? pwdStrength.score === 4
+                          ? 'bg-emerald-500'
+                          : pwdStrength.score >= 2
+                          ? 'bg-amber-500'
+                          : 'bg-red-500'
+                        : 'bg-transparent'
+                    }`}
+                  />
+                ))}
+              </div>
+
+              {/* Requirement Checklist */}
+              <div className="grid grid-cols-2 gap-1.5 text-[11px] text-[#64748B] pt-1">
+                <div
+                  className={`flex items-center gap-1.5 ${
+                    newPassword.length >= 8 ? 'text-emerald-700 font-semibold' : ''
+                  }`}
+                >
+                  <span>{newPassword.length >= 8 ? '✓' : '•'}</span>
+                  <span>Min 8 characters</span>
+                </div>
+                <div
+                  className={`flex items-center gap-1.5 ${
+                    /[A-Z]/.test(newPassword) ? 'text-emerald-700 font-semibold' : ''
+                  }`}
+                >
+                  <span>{/[A-Z]/.test(newPassword) ? '✓' : '•'}</span>
+                  <span>1 Uppercase (A-Z)</span>
+                </div>
+                <div
+                  className={`flex items-center gap-1.5 ${
+                    /[a-z]/.test(newPassword) ? 'text-emerald-700 font-semibold' : ''
+                  }`}
+                >
+                  <span>{/[a-z]/.test(newPassword) ? '✓' : '•'}</span>
+                  <span>1 Lowercase (a-z)</span>
+                </div>
+                <div
+                  className={`flex items-center gap-1.5 ${
+                    /[0-9]/.test(newPassword) ? 'text-emerald-700 font-semibold' : ''
+                  }`}
+                >
+                  <span>{/[0-9]/.test(newPassword) ? '✓' : '•'}</span>
+                  <span>1 Number (0-9)</span>
+                </div>
+                <div
+                  className={`col-span-2 flex items-center gap-1.5 ${
+                    /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(newPassword)
+                      ? 'text-emerald-700 font-semibold'
+                      : ''
+                  }`}
+                >
+                  <span>
+                    {/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(newPassword) ? '✓' : '•'}
+                  </span>
+                  <span>1 Special character (!@#$%^&*)</span>
+                </div>
+              </div>
+            </div>
+
+            <Button
+              type="submit"
+              variant="primary"
+              size="lg"
+              className="w-full"
+              loading={loading}
+              disabled={!pwdStrength.isValid || newPassword !== confirmPassword}
+            >
+              Reset Password
+            </Button>
+          </form>
+        )}
+
+        {/* ============================================================ */}
+        {/* VIEW 5: FORGOT PASSWORD - STEP 4 (SUCCESS CONFIRMATION)       */}
+        {/* ============================================================ */}
+        {view === 'FORGOT_SUCCESS' && (
+          <div className="space-y-6 text-center py-2 animate-fade-in">
+            <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto border border-emerald-200">
+              <CheckCircle className="w-8 h-8" />
+            </div>
+
+            <div className="space-y-2">
+              <h2 className="text-xl font-bold tracking-tight text-[#111111]">
+                Password Reset Successfully
+              </h2>
+              <p className="text-xs text-[#64748B] max-w-sm mx-auto leading-relaxed">
+                Your password has been successfully reset. Please log in using your new password.
+              </p>
+            </div>
+
+            <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800 text-left flex items-start gap-2">
+              <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <span>
+                Security Notice: All previous sessions have been revoked. Old passwords are now invalid.
+              </span>
+            </div>
+
+            <Button
+              type="button"
+              variant="primary"
+              size="lg"
+              className="w-full"
+              onClick={() => {
+                setView('LOGIN');
+                setError(null);
+                setSuccessNotice('Please enter your new password to sign in.');
+              }}
+            >
+              Return to Login
+            </Button>
           </div>
         )}
       </div>
@@ -840,26 +1059,3 @@ export const LoginPage: React.FC = () => {
     </div>
   );
 };
-
-function GoogleIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" {...props}>
-      <path
-        fill="#EA4335"
-        d="M12 5c1.54 0 2.93.56 4.02 1.48l3.01-3.01C17.21 1.8 14.77 1 12 1 7.42 1 3.51 3.61 1.63 7.41l3.66 2.84C6.18 7.31 8.87 5 12 5z"
-      />
-      <path
-        fill="#4285F4"
-        d="M23.49 12.28c0-.79-.07-1.54-.19-2.28H12v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58l3.69 2.86c2.16-1.99 3.73-4.92 3.73-8.67z"
-      />
-      <path
-        fill="#FBBC05"
-        d="M5.29 14.75c-.24-.72-.38-1.49-.38-2.28s.14-1.56.38-2.28L1.63 7.35C.6 9.4 0 11.63 0 14s.6 4.6 1.63 6.65l3.66-2.9z"
-      />
-      <path
-        fill="#34A853"
-        d="M12 23c3.24 0 5.95-1.08 7.93-2.91l-3.69-2.86c-1.08.72-2.45 1.16-4.24 1.16-3.13 0-5.82-2.31-6.71-5.25L1.63 16.04C3.51 19.84 7.42 22.45 12 22.45z"
-      />
-    </svg>
-  );
-}

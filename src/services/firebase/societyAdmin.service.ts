@@ -231,6 +231,9 @@ const DEFAULT_GATES: SocietyGate[] = [
     assignedGuardsCount: 3,
     hasBoomBarrier: true,
     hasLicensePlateCamera: true,
+    gateType: 'VEHICULAR',
+    rfidReaderEnabled: true,
+    assignedGuards: ['guard_1', 'dev_user_guard_919876500010', 'EMP-SEC-01', 'Bahadur Singh'],
   },
   {
     id: 'gate_2',
@@ -241,6 +244,9 @@ const DEFAULT_GATES: SocietyGate[] = [
     assignedGuardsCount: 2,
     hasBoomBarrier: true,
     hasLicensePlateCamera: true,
+    gateType: 'SERVICE',
+    rfidReaderEnabled: false,
+    assignedGuards: ['guard_2', 'EMP-G-204'],
   },
   {
     id: 'gate_3',
@@ -251,6 +257,9 @@ const DEFAULT_GATES: SocietyGate[] = [
     assignedGuardsCount: 1,
     hasBoomBarrier: false,
     hasLicensePlateCamera: false,
+    gateType: 'PEDESTRIAN',
+    rfidReaderEnabled: true,
+    assignedGuards: ['guard_3'],
   },
 ];
 
@@ -928,6 +937,34 @@ export async function revokeDomesticHelper(societyId: string, helperId: string):
 // 7. GATES
 // ==========================================
 export async function getSocietyGates(societyId: string): Promise<SocietyGate[]> {
+  try {
+    if (db) {
+      const gatesRef = collection(db, 'societies', societyId, 'gates');
+      const snap = await getDocs(gatesRef);
+      if (!snap.empty) {
+        const firestoreGates = snap.docs.map((docSnap) => {
+          const d = docSnap.data();
+          return {
+            id: docSnap.id,
+            societyId: d.societyId || societyId,
+            name: d.name || 'Gate Terminal',
+            locationDescription: d.locationDescription || d.location || '',
+            operatingStatus: d.operatingStatus || d.status || 'OPEN',
+            assignedGuardsCount: d.assignedGuardsCount || (Array.isArray(d.assignedGuards) ? d.assignedGuards.length : 2),
+            hasBoomBarrier: Boolean(d.hasBoomBarrier),
+            hasLicensePlateCamera: Boolean(d.hasLicensePlateCamera || d.anprEnabled),
+            assignedGuards: d.assignedGuards || [],
+            gateType: d.gateType || 'VEHICULAR',
+            rfidReaderEnabled: Boolean(d.rfidReaderEnabled),
+          } as SocietyGate;
+        });
+        setStored('hpz_soc_gates_' + societyId, firestoreGates);
+        return firestoreGates;
+      }
+    }
+  } catch (err) {
+    console.warn('[Firestore] getSocietyGates query error, falling back to local:', err);
+  }
   return getStored<SocietyGate[]>('hpz_soc_gates_' + societyId, DEFAULT_GATES);
 }
 
@@ -936,11 +973,12 @@ export async function addSocietyGate(
   name: string,
   locationDescription: string,
   hasBoomBarrier: boolean,
-  hasLicensePlateCamera: boolean
+  hasLicensePlateCamera: boolean,
+  gateType: 'VEHICULAR' | 'PEDESTRIAN' | 'SERVICE' | 'EMERGENCY' = 'VEHICULAR'
 ): Promise<SocietyGate> {
-  const list = await getSocietyGates(societyId);
+  const newId = `gate_${Date.now()}`;
   const newGate: SocietyGate = {
-    id: `gate_${Date.now()}`,
+    id: newId,
     societyId,
     name,
     locationDescription,
@@ -948,7 +986,21 @@ export async function addSocietyGate(
     assignedGuardsCount: 2,
     hasBoomBarrier,
     hasLicensePlateCamera,
+    gateType,
+    rfidReaderEnabled: hasBoomBarrier,
+    assignedGuards: [],
   };
+
+  try {
+    if (db) {
+      const gateDocRef = doc(db, 'societies', societyId, 'gates', newId);
+      await setDoc(gateDocRef, newGate);
+    }
+  } catch (err) {
+    console.warn('[Firestore] addSocietyGate setDoc error:', err);
+  }
+
+  const list = await getSocietyGates(societyId);
   setStored('hpz_soc_gates_' + societyId, [...list, newGate]);
   return newGate;
 }

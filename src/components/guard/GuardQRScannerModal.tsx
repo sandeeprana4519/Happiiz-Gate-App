@@ -116,8 +116,8 @@ export const GuardQRScannerModal: React.FC<GuardQRScannerModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-      <div className="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl border border-gray-100 my-auto animate-scale-in">
+    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 w-full max-w-full overflow-y-auto overflow-x-hidden">
+      <div className="bg-white rounded-3xl max-w-sm w-full p-4 sm:p-5 shadow-2xl border border-gray-100 my-auto animate-scale-in max-w-full overflow-x-hidden">
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-gray-100">
           <div className="flex items-center gap-2">

@@ -83,7 +83,7 @@ export const GuardWaitingView: React.FC<GuardWaitingViewProps> = ({
   };
 
   return (
-    <div className="space-y-4 px-4 pt-4 pb-20 animate-fade-in max-w-lg mx-auto">
+    <div className="w-full max-w-full overflow-x-hidden space-y-4 px-1 sm:px-2 pt-2 pb-20 animate-fade-in max-w-lg mx-auto min-w-0">
       {/* Title & Refresh */}
       <div className="flex items-center justify-between">
         <div>
@@ -120,38 +120,46 @@ export const GuardWaitingView: React.FC<GuardWaitingViewProps> = ({
                     : 'bg-white border-[#E6F1F5]'
                 }`}
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3">
+                <div className="flex items-start justify-between gap-2 sm:gap-3 flex-wrap xs:flex-nowrap min-w-0">
+                  <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
                     {v.photoUrl ? (
-                      <img src={v.photoUrl} alt={v.visitorName} className="w-12 h-12 rounded-xl object-cover border border-purple-200" />
+                      <img src={v.photoUrl} alt={v.visitorName} className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl object-cover border border-purple-200 shrink-0" />
                     ) : (
-                      <div className="w-12 h-12 rounded-xl bg-purple-50 text-[#673AB7] flex items-center justify-center font-bold">
-                        {v.category === 'Guest' ? <User className="w-6 h-6" /> :
-                         v.category === 'Delivery' ? <Truck className="w-6 h-6" /> :
-                         v.category === 'Service' ? <Wrench className="w-6 h-6" /> :
-                         <Car className="w-6 h-6" />}
+                      <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-purple-50 text-[#673AB7] flex items-center justify-center font-bold shrink-0">
+                        {v.category === 'Guest' ? <User className="w-5 h-5 sm:w-6 sm:h-6" /> :
+                         v.category === 'Delivery' ? <Truck className="w-5 h-5 sm:w-6 sm:h-6" /> :
+                         v.category === 'Service' ? <Wrench className="w-5 h-5 sm:w-6 sm:h-6" /> :
+                         <Car className="w-5 h-5 sm:w-6 sm:h-6" />}
                       </div>
                     )}
 
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h4 className="font-bold text-sm text-gray-900">{v.visitorName}</h4>
-                        <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-[#F1F9FC] text-[#673AB7] border border-[#E6F1F5]">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <h4 className="font-bold text-xs sm:text-sm text-gray-900 truncate">{v.visitorName}</h4>
+                        <span className="text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full font-bold bg-[#F1F9FC] text-[#673AB7] border border-[#E6F1F5] shrink-0">
                           {v.deliveryCompany || v.serviceCompany || v.category}
                         </span>
                       </div>
-                      <p className="text-xs text-gray-600 mt-0.5">
+                      <p className="text-[11px] sm:text-xs text-gray-600 mt-0.5 truncate">
                         Visiting Flat <strong className="text-gray-900">{v.flatNumber}</strong>
                       </p>
-                      <p className="text-[11px] text-gray-400 font-mono mt-0.5 flex items-center gap-1">
-                        <Clock className="w-3 h-3 text-amber-500" />
+                      {(v.vehicleNumber || v.cabVehiclePlate) && (
+                        <p className="text-[10px] sm:text-[11px] font-mono font-bold text-gray-700 mt-0.5 truncate flex items-center gap-1">
+                          <span className="text-[9px] px-1 py-0.2 bg-amber-100 text-amber-800 rounded font-sans font-bold">
+                            {v.vehicleType && v.vehicleType !== 'None' ? v.vehicleType : 'Vehicle'}
+                          </span>
+                          <span>{v.vehicleNumber || v.cabVehiclePlate}</span>
+                        </p>
+                      )}
+                      <p className="text-[10px] sm:text-[11px] text-gray-400 font-mono mt-0.5 flex items-center gap-1 truncate">
+                        <Clock className="w-3 h-3 text-amber-500 shrink-0" />
                         <span>Arrived at {new Date(v.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                       </p>
                     </div>
                   </div>
 
                   {/* Status chip */}
-                  <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${
+                  <span className={`text-[9px] sm:text-[10px] uppercase font-bold px-2 py-0.5 rounded-full shrink-0 self-start ${
                     isApproved
                       ? 'bg-emerald-100 text-emerald-800 animate-pulse'
                       : 'bg-amber-100 text-amber-800'
@@ -220,8 +228,8 @@ export const GuardWaitingView: React.FC<GuardWaitingViewProps> = ({
 
       {/* Manual Admin Override Modal */}
       {showOverrideModal && selectedVisitor && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl border border-gray-100 animate-scale-in">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 w-full max-w-full overflow-y-auto overflow-x-hidden">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-4 sm:p-5 shadow-2xl border border-gray-100 animate-scale-in max-w-full overflow-x-hidden">
             <div className="flex items-center gap-2 text-amber-700 font-bold text-sm mb-2">
               <AlertTriangle className="w-5 h-5 text-amber-600" />
               <span>Manual Administrative Override</span>

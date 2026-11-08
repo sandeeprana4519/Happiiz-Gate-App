@@ -17,7 +17,8 @@ import {
   Car, 
   Layers, 
   AlertCircle,
-  RefreshCw
+  RefreshCw,
+  Bike
 } from 'lucide-react';
 import { VisitorCategoryType } from '../../types/guard';
 
@@ -59,6 +60,12 @@ export const GuardVisitorEntryModal: React.FC<GuardVisitorEntryModalProps> = ({
   const [cabVehiclePlate, setCabVehiclePlate] = useState('MH 02 CZ 4821');
   const [cabPassengers, setCabPassengers] = useState(1);
 
+  // Vehicle Details for all visitors (Guest, Delivery, Service, Cab)
+  const [vehicleType, setVehicleType] = useState<'None' | 'Bike' | 'Car' | 'Auto' | 'E-Rickshaw' | 'Other'>(
+    initialCategory === 'Cab' ? 'Car' : 'None'
+  );
+  const [vehicleNumber, setVehicleNumber] = useState(initialCategory === 'Cab' ? 'MH 02 CZ 4821' : '');
+
   // Camera capture state
   const [showCamera, setShowCamera] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -69,6 +76,10 @@ export const GuardVisitorEntryModal: React.FC<GuardVisitorEntryModalProps> = ({
 
   useEffect(() => {
     setCategory(initialCategory);
+    if (initialCategory === 'Cab') {
+      setVehicleType('Car');
+      if (!vehicleNumber) setVehicleNumber('MH 02 CZ 4821');
+    }
   }, [initialCategory]);
 
   const handleStartCamera = async () => {
@@ -123,6 +134,11 @@ export const GuardVisitorEntryModal: React.FC<GuardVisitorEntryModalProps> = ({
     e.preventDefault();
     setSubmitting(true);
     try {
+      const finalVehicleNumber = (vehicleNumber || cabVehiclePlate || '').trim().toUpperCase();
+      const finalVehicleType = category === 'Cab' 
+        ? (vehicleType === 'None' ? 'Car' : vehicleType)
+        : vehicleType;
+
       await onSubmit({
         category,
         visitorName,
@@ -138,8 +154,10 @@ export const GuardVisitorEntryModal: React.FC<GuardVisitorEntryModalProps> = ({
         serviceCompany: category === 'Service' ? serviceCompany : undefined,
         serviceCategory: category === 'Service' ? serviceCategory : undefined,
         cabCompany: category === 'Cab' ? cabCompany : undefined,
-        cabVehiclePlate: category === 'Cab' ? cabVehiclePlate : undefined,
+        cabVehiclePlate: category === 'Cab' ? (finalVehicleNumber || undefined) : undefined,
         cabPassengers: category === 'Cab' ? cabPassengers : undefined,
+        vehicleType: finalVehicleType,
+        vehicleNumber: finalVehicleType !== 'None' ? finalVehicleNumber : undefined,
       });
 
       const randomPass = `${Math.floor(100000 + Math.random() * 900000)}`;
@@ -157,14 +175,16 @@ export const GuardVisitorEntryModal: React.FC<GuardVisitorEntryModalProps> = ({
     setVisitorName('');
     setVisitorPhone('');
     setPhotoUrl(null);
+    setVehicleType(initialCategory === 'Cab' ? 'Car' : 'None');
+    setVehicleNumber(initialCategory === 'Cab' ? 'MH 02 CZ 4821' : '');
     onClose();
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-      <div className="bg-white rounded-3xl max-w-md w-full p-5 shadow-2xl border border-gray-100 my-auto animate-scale-in">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 w-full max-w-full overflow-y-auto overflow-x-hidden">
+      <div className="bg-white rounded-3xl max-w-md w-full p-4 sm:p-5 shadow-2xl border border-gray-100 my-auto animate-scale-in max-w-full overflow-x-hidden max-h-[92vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-gray-100">
           <div className="flex items-center gap-2">
@@ -222,8 +242,14 @@ export const GuardVisitorEntryModal: React.FC<GuardVisitorEntryModalProps> = ({
                 <button
                   key={cat}
                   type="button"
-                  onClick={() => setCategory(cat)}
-                  className={`py-1.5 rounded-lg text-xs font-bold transition ${
+                  onClick={() => {
+                    setCategory(cat);
+                    if (cat === 'Cab') {
+                      if (vehicleType === 'None') setVehicleType('Car');
+                      if (!vehicleNumber) setVehicleNumber('MH 02 CZ 4821');
+                    }
+                  }}
+                  className={`py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                     category === cat
                       ? 'bg-[#673AB7] text-white shadow-xs'
                       : 'text-gray-600 hover:text-gray-900'
@@ -464,32 +490,152 @@ export const GuardVisitorEntryModal: React.FC<GuardVisitorEntryModalProps> = ({
               </div>
             )}
 
-            {category === 'Cab' && (
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-gray-600 mb-1">Cab Aggregator *</label>
-                  <select
-                    value={cabCompany}
-                    onChange={(e) => setCabCompany(e.target.value as any)}
-                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-[#673AB7] focus:outline-none font-bold"
-                  >
-                    <option value="Uber">Uber</option>
-                    <option value="Ola">Ola</option>
-                    <option value="Rapido">Rapido</option>
-                    <option value="InDrive">InDrive</option>
-                    <option value="Other">Private Taxi</option>
-                  </select>
+            {/* Vehicle Details for Guest, Delivery, Service */}
+            {category !== 'Cab' && (
+              <div className="p-3 bg-[#F8FAFC] rounded-2xl border border-gray-200/90 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-800 font-extrabold text-xs flex items-center gap-1.5">
+                    <Car className="w-4 h-4 text-[#673AB7]" />
+                    <span>वाहन का विवरण (Vehicle Details)</span>
+                  </span>
+                  <span className="text-[10px] text-gray-600 font-bold bg-white px-2 py-0.5 rounded-md border border-gray-200">
+                    {vehicleType === 'None' ? 'पैदल / No Vehicle' : `${vehicleType}`}
+                  </span>
                 </div>
+
+                {/* Vehicle Type Choice Chips */}
                 <div>
-                  <label className="block font-semibold text-gray-600 mb-1">Vehicle Plate (Last 4 digits) *</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 4821 or MH 02 CZ 4821"
-                    value={cabVehiclePlate}
-                    onChange={(e) => setCabVehiclePlate(e.target.value.toUpperCase())}
-                    required
-                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-[#673AB7] focus:outline-none font-mono font-bold"
-                  />
+                  <label className="block font-semibold text-gray-600 mb-1 text-[11px]">
+                    वाहन प्रकार चुनें (Select Vehicle Type)
+                  </label>
+                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+                    {[
+                      { id: 'None', label: 'पैदल', icon: '🚶' },
+                      { id: 'Bike', label: 'बाइक', icon: '🏍️' },
+                      { id: 'Car', label: 'कार', icon: '🚗' },
+                      { id: 'Auto', label: 'ऑटो', icon: '🛺' },
+                      { id: 'E-Rickshaw', label: 'ई-रिक्शा', icon: '⚡' },
+                      { id: 'Other', label: 'अन्य', icon: '🚚' },
+                    ].map((item) => {
+                      const isSelected = vehicleType === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => setVehicleType(item.id as any)}
+                          className={`py-1.5 px-1 rounded-xl text-center border transition cursor-pointer flex flex-col items-center justify-center ${
+                            isSelected
+                              ? 'bg-[#673AB7] text-white border-[#673AB7] shadow-xs'
+                              : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                          }`}
+                        >
+                          <span className="text-sm">{item.icon}</span>
+                          <span className="text-[10px] font-bold mt-0.5">{item.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Vehicle Number input when a vehicle is selected */}
+                {vehicleType !== 'None' && (
+                  <div className="pt-1 animate-scale-in">
+                    <label className="block font-semibold text-gray-700 mb-1 text-[11px]">
+                      Vehicle Registration Number (गाड़ी नंबर) *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. DL 01 AB 1234 or HR 26 DK 8899"
+                      value={vehicleNumber}
+                      onChange={(e) => setVehicleNumber(e.target.value.toUpperCase())}
+                      required
+                      className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-[#673AB7] focus:outline-none font-mono font-bold tracking-wider uppercase bg-white text-gray-900"
+                    />
+                    <p className="text-[10px] text-gray-400 mt-1">
+                      सुरक्षा रिकॉर्ड और ऑडिट के लिए वाहन नंबर दर्ज करें
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Cab Aggregator, Vehicle Type and Plate */}
+            {category === 'Cab' && (
+              <div className="p-3 bg-[#F8FAFC] rounded-2xl border border-gray-200/90 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-800 font-extrabold text-xs flex items-center gap-1.5">
+                    <Car className="w-4 h-4 text-[#673AB7]" />
+                    <span>कैब व वाहन का विवरण (Cab & Vehicle Details)</span>
+                  </span>
+                  <span className="text-[10px] text-[#673AB7] font-bold bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200">
+                    Fast Pass
+                  </span>
+                </div>
+
+                {/* Cab Aggregator & Vehicle Type */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-gray-600 mb-1">Cab Aggregator *</label>
+                    <select
+                      value={cabCompany}
+                      onChange={(e) => setCabCompany(e.target.value as any)}
+                      className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-[#673AB7] focus:outline-none font-bold"
+                    >
+                      <option value="Uber">Uber (उबर)</option>
+                      <option value="Ola">Ola (ओला)</option>
+                      <option value="Rapido">Rapido (रैपिडो)</option>
+                      <option value="InDrive">InDrive (इनड्राइव)</option>
+                      <option value="Other">Private Taxi / Local Cab</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-gray-600 mb-1">
+                      वाहन प्रकार (Vehicle Type) *
+                    </label>
+                    <select
+                      value={vehicleType === 'None' ? 'Car' : vehicleType}
+                      onChange={(e) => setVehicleType(e.target.value as any)}
+                      className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-[#673AB7] focus:outline-none font-bold text-gray-900"
+                    >
+                      <option value="Car">🚗 Car / Taxi (कार)</option>
+                      <option value="Auto">🛺 Auto (ऑटो)</option>
+                      <option value="Bike">🏍️ Bike Taxi (बाइक टैक्सी)</option>
+                      <option value="E-Rickshaw">⚡ E-Rickshaw (ई-रिक्शा)</option>
+                      <option value="Other">🚐 Other (अन्य वाहन)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Vehicle Plate & Passengers */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-gray-600 mb-1">
+                      Vehicle Plate Number (गाड़ी नंबर) *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. MH 02 CZ 4821"
+                      value={vehicleNumber || cabVehiclePlate}
+                      onChange={(e) => {
+                        const val = e.target.value.toUpperCase();
+                        setVehicleNumber(val);
+                        setCabVehiclePlate(val);
+                      }}
+                      required
+                      className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-[#673AB7] focus:outline-none font-mono font-bold tracking-wider uppercase bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-gray-600 mb-1">Passengers (सवारी)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="8"
+                      value={cabPassengers}
+                      onChange={(e) => setCabPassengers(Number(e.target.value))}
+                      className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-[#673AB7] focus:outline-none bg-white"
+                    />
+                  </div>
                 </div>
               </div>
             )}

@@ -66,7 +66,7 @@ export const Footer: React.FC = () => {
                     to="/dashboard/guard"
                     className="hover:text-[#673AB7] transition-colors inline-flex items-center gap-1.5"
                   >
-                    <span>Gate Sentinel</span>
+                    <span>Gate Guard</span>
                   </Link>
                 </li>
                 <li>

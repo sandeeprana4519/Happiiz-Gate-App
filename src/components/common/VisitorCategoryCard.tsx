@@ -20,17 +20,15 @@ export const VisitorCategoryCard: React.FC<VisitorCategoryCardProps> = ({
     <button
       onClick={onClick}
       type="button"
-      className="relative shrink-0 w-32 sm:w-36 h-40 sm:h-44 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] p-3 flex flex-col justify-between text-left overflow-hidden transition-all duration-150 hover:border-[#673AB7]/30 hover:shadow-sm active:scale-95 cursor-pointer group select-none"
+      className="relative w-full min-w-0 h-20 sm:h-24 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] p-2 flex flex-col justify-between items-center text-center overflow-hidden transition-all duration-150 hover:border-[#673AB7]/50 hover:shadow-sm active:scale-95 cursor-pointer group select-none shadow-xs shrink-0"
     >
-      {/* Title at Top-Left */}
-      <div className="z-10">
-        <h3 className="text-base sm:text-lg font-bold text-[#111111] leading-tight whitespace-pre-line group-hover:text-[#673AB7] transition-colors">
-          {title}
-        </h3>
-      </div>
+      {/* Compact Title */}
+      <span className="text-[11px] sm:text-xs font-extrabold text-[#111111] leading-tight group-hover:text-[#673AB7] transition-colors truncate w-full px-0.5">
+        {title}
+      </span>
 
-      {/* 3D Character Illustration at Bottom-Right */}
-      <div className="absolute right-0 bottom-0 pointer-events-none transform translate-x-1 translate-y-1 group-hover:scale-105 transition-transform">
+      {/* 3D Illustration Container */}
+      <div className="flex-1 w-full flex items-end justify-center overflow-hidden pointer-events-none pb-0.5 transform group-hover:scale-105 transition-transform">
         {illustration}
       </div>
     </button>

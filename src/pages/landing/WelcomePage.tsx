@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Gate3DIllustration } from '../../components/visuals/Gate3DIllustration';
 import { Button } from '../../components/common/Button';
 import { Card } from '../../components/common/Card';
@@ -15,19 +15,11 @@ import {
   Wrench,
   Smartphone,
   Lock,
-  ArrowRight,
-  Download,
-  KeyRound,
-  Shield,
-  Layers,
-  Sparkles,
 } from 'lucide-react';
-import { usePWAInstall } from '../../hooks/usePWAInstall';
 
 export const WelcomePage: React.FC = () => {
-  const { user, loginWithDemoRole } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
-  const { isInstallable, install } = usePWAInstall();
 
   const handleLaunchPortal = (path: string, demoRole?: 'SECURITY_GUARD' | 'RESIDENT' | 'SERVICE_PARTNER') => {
     if (user) {
@@ -68,32 +60,7 @@ export const WelcomePage: React.FC = () => {
               into a single high-performance platform.
             </p>
 
-            <div className="flex flex-wrap items-center justify-center lg:justify-start gap-3.5 pt-2">
-              <Link to="/login">
-                <Button size="lg" variant="primary" rightIcon={<ArrowRight className="w-4 h-4" />}>
-                  Access Terminal / Login
-                </Button>
-              </Link>
-
-              {isInstallable ? (
-                <Button
-                  size="lg"
-                  variant="glass"
-                  leftIcon={<Download className="w-4 h-4 text-[#0EA5E9]" />}
-                  onClick={install}
-                >
-                  Install PWA
-                </Button>
-              ) : (
-                <Button
-                  size="lg"
-                  variant="glass"
-                  onClick={() => navigate('/dashboard/resident')}
-                >
-                  Explore Resident Portal
-                </Button>
-              )}
-            </div>
+            {/* Hero CTAs removed per specification: Keep one Login button in top-right navigation */}
           </div>
 
           {/* Right Column: 3D Gate Vector Visual */}
@@ -120,7 +87,7 @@ export const WelcomePage: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Card 1: Gate Sentinel */}
+          {/* Card 1: Gate Guard */}
           <div className="rounded-2xl bg-[#FFFFFF] border border-[#E6F1F5] p-6 shadow-xs hover:shadow-md hover:border-[#673AB7]/40 transition-all duration-200 flex flex-col justify-between group">
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -134,7 +101,7 @@ export const WelcomePage: React.FC = () => {
 
               <div>
                 <h3 className="text-lg font-bold text-[#111111] group-hover:text-[#673AB7] transition-colors">
-                  Gate Sentinel
+                  Gate Guard
                 </h3>
                 <p className="text-xs text-[#64748B] mt-1.5 leading-relaxed">
                   Real-time barrier control, visitor pass validation, cab & delivery clearance, and emergency alarm trigger.
@@ -168,7 +135,7 @@ export const WelcomePage: React.FC = () => {
                 className="w-full text-xs font-bold"
                 onClick={() => handleLaunchPortal('/dashboard/guard', 'SECURITY_GUARD')}
               >
-                Launch Gate Sentinel →
+                Launch Gate Guard →
               </Button>
             </div>
           </div>

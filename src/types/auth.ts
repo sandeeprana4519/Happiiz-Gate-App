@@ -141,7 +141,7 @@ export interface AuthContextType {
   setActiveMembership: (membership: SocietyMembership) => void;
   switchRole: (role: UserRole) => void;
   loginWithDemoRole: (role: UserRole) => void;
-  loginWithDemoSession?: (profile: UserProfile) => void;
+  loginWithDemoSession: (profile: UserProfile) => void;
   refreshUserProfile: () => Promise<void>;
   logout: () => Promise<void>;
 }

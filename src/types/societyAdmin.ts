@@ -99,12 +99,15 @@ export interface SocietyDomesticHelper {
 export interface SocietyGate {
   id: string;
   societyId: string;
-  name: string; // e.g. "Main Gate #1", "West Pedestrian Gate", "Service Gate"
+  name: string; // e.g. "Gate #1 (North Main)", "Gate #2 (East Commercial & Deliveries)"
   locationDescription: string;
   operatingStatus: 'OPEN' | 'RESTRICTED' | 'EMERGENCY_LOCKED' | 'MAINTENANCE';
   assignedGuardsCount: number;
   hasBoomBarrier: boolean;
   hasLicensePlateCamera: boolean;
+  assignedGuards?: string[];
+  gateType?: 'VEHICULAR' | 'PEDESTRIAN' | 'SERVICE' | 'EMERGENCY';
+  rfidReaderEnabled?: boolean;
 }
 
 export interface SocietyNotice {

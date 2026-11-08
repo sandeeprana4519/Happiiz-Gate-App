@@ -69,6 +69,8 @@ const DEFAULT_VISITORS: GuardVisitor[] = [
     residentPhone: '+91 98765 43210',
     purpose: 'Family Dinner',
     numberOfVisitors: 2,
+    vehicleType: 'Car',
+    vehicleNumber: 'DL 01 AB 4421',
     approvalHistory: [
       { timestamp: new Date(Date.now() - 47 * 60 * 1000).toISOString(), action: 'CREATED', actor: 'Bahadur Singh' },
       { timestamp: new Date(Date.now() - 45 * 60 * 1000).toISOString(), action: 'APPROVED', actor: 'Rajesh Sharma (Resident)' },
@@ -93,6 +95,8 @@ const DEFAULT_VISITORS: GuardVisitor[] = [
     deliveryCompany: 'Swiggy',
     deliveryType: 'Food',
     packageDescription: 'Food Parcel #8812',
+    vehicleType: 'Bike',
+    vehicleNumber: 'MH 02 DQ 8812',
     entryAt: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
     residentName: 'Dr. Priya Varma',
     residentPhone: '+91 98201 12345',
@@ -120,6 +124,8 @@ const DEFAULT_VISITORS: GuardVisitor[] = [
     passCode: '492014',
     cabCompany: 'Ola',
     cabVehiclePlate: 'MH 02 CZ 9841',
+    vehicleType: 'Auto',
+    vehicleNumber: 'MH 02 CZ 9841',
     cabPassengers: 1,
     residentName: 'Ananya Patel',
     residentPhone: '+91 98190 22334',
@@ -146,6 +152,8 @@ const DEFAULT_VISITORS: GuardVisitor[] = [
     passCode: '119284',
     serviceCompany: 'Urban Company',
     serviceCategory: 'AC Technician',
+    vehicleType: 'Bike',
+    vehicleNumber: 'MH 02 EF 1192',
     purpose: 'AC Servicing',
     entryAt: new Date(Date.now() - 3 * 3600 * 1000).toISOString(),
     exitAt: new Date(Date.now() - 1 * 3600 * 1000).toISOString(),
@@ -277,16 +285,17 @@ const otpAttemptsMap: Record<string, { attempts: number; blockedUntil: number }>
 export const guardService = {
   // 1. Guard Profile & Session Validation
   getGuardSession(user: any): GuardProfileInfo {
+    const assignedGate = user?.gateAssigned || 'Gate #1 (North Main)';
     return {
       uid: user?.uid || 'guard_1',
       fullName: user?.displayName || user?.fullName || 'Bahadur Singh',
       phoneNumber: user?.phoneNumber || '+91 98765 00010',
-      badgeNumber: 'SEC-101',
-      employeeId: 'HPZ-GRD-0441',
+      badgeNumber: user?.badgeNumber || 'SEC-101',
+      employeeId: user?.employmentId || 'HPZ-GRD-0441',
       assignedSocietyId: user?.societyId || 'soc_emerald_heights',
       assignedSocietyName: user?.societyName || 'Emerald Heights Luxury Enclave',
-      assignedGateId: 'gate_1',
-      assignedGateName: 'Gate A, West Corner',
+      assignedGateId: user?.assignedGateId || 'gate_1',
+      assignedGateName: assignedGate,
       status: 'ACTIVE',
       shift: 'DAY',
       preferredLanguage: 'en',
@@ -356,6 +365,8 @@ export const guardService = {
       cabCompany?: any;
       cabVehiclePlate?: string;
       cabPassengers?: number;
+      vehicleType?: 'None' | 'Bike' | 'Car' | 'Auto' | 'E-Rickshaw' | 'Other';
+      vehicleNumber?: string;
       autoApprove?: boolean;
     }
   ): Promise<GuardVisitor> {
@@ -365,6 +376,9 @@ export const guardService = {
 
     const isAutoApproved = data.autoApprove || data.category === 'Cab';
     const status: VisitorEntryStatus = isAutoApproved ? 'INSIDE' : 'WAITING_APPROVAL';
+
+    const resolvedVehiclePlate = data.cabVehiclePlate || data.vehicleNumber;
+    const resolvedVehicleType = data.vehicleType || (data.category === 'Cab' ? 'Car' : 'None');
 
     const newVisitor: GuardVisitor = {
       id: `vis_${Date.now()}`,
@@ -389,8 +403,10 @@ export const guardService = {
       serviceCompany: data.serviceCompany,
       serviceCategory: data.serviceCategory,
       cabCompany: data.cabCompany,
-      cabVehiclePlate: data.cabVehiclePlate,
+      cabVehiclePlate: resolvedVehiclePlate,
       cabPassengers: data.cabPassengers,
+      vehicleType: resolvedVehicleType,
+      vehicleNumber: data.vehicleNumber || resolvedVehiclePlate,
       entryAt: isAutoApproved ? now : undefined,
       approvalHistory: [
         { timestamp: now, action: 'CREATED', actor: guardName },

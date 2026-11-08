@@ -59,6 +59,10 @@ export interface GuardVisitor {
   cabVehiclePlate?: string;
   cabPassengers?: number;
 
+  // Vehicle information (Guest, Delivery, Service, Cab)
+  vehicleType?: 'None' | 'Bike' | 'Car' | 'Auto' | 'E-Rickshaw' | 'Other';
+  vehicleNumber?: string;
+
   isPreApproved?: boolean;
   approvalHistory: VisitorAuditAction[];
   adminOverrideReason?: string;

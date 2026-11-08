@@ -3,23 +3,24 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @layer base {
-  :root {
-    --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-    --font-mono: 'JetBrains Mono', monospace;
+  *, *::before, *::after {
+    box-sizing: border-box;
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
+  }
 
-    /* Happiiz Gate App Reference Design Tokens */
-    --bg-main: #FFFFFF;
-    --bg-card-primary: #F1F9FC;
-    --bg-card-secondary: #F5FAFC;
-    --border-card: #E6F1F5;
-    --text-primary: #111111;
-    --text-secondary: #A9B0B8;
-    --purple-primary: #673AB7;
-    --purple-dark: #512DA8;
-    --notification-red: #E53945;
-    --nav-bottom-bg: #050505;
-    --nav-bottom-inactive: #9DA3AD;
-    --nav-bottom-active: #FFFFFF;
+  *::-webkit-scrollbar {
+    display: none !important;
+    width: 0px !important;
+    height: 0px !important;
+  }
+
+  html {
+    max-width: 100%;
+    overflow-x: hidden;
+    -webkit-text-size-adjust: 100%;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
   }
 
   body {
@@ -27,8 +28,11 @@
     background-color: var(--bg-main);
     color: var(--text-primary);
     min-height: 100vh;
+    max-width: 100%;
     overflow-x: hidden;
     -webkit-tap-highlight-color: transparent;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
   }
 }
 

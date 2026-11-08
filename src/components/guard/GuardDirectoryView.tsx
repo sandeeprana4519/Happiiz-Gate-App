@@ -45,33 +45,35 @@ export const GuardDirectoryView: React.FC<GuardDirectoryViewProps> = ({
   });
 
   return (
-    <div className="space-y-4 px-4 pt-4 pb-20 animate-fade-in max-w-lg mx-auto">
+    <div className="w-full max-w-full overflow-x-hidden space-y-4 px-1 sm:px-2 pt-2 pb-20 animate-fade-in max-w-lg mx-auto min-w-0">
       {/* Sub-tabs: Directory & Messages */}
-      <div className="flex bg-[#F1F9FC] p-1 rounded-2xl border border-[#E6F1F5]">
+      <div className="flex bg-[#F1F9FC] p-1 rounded-2xl border border-[#E6F1F5] w-full min-w-0">
         <button
+          type="button"
           onClick={() => setActiveSubTab('DIRECTORY')}
-          className={`flex-1 py-2 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 ${
+          className={`flex-1 py-2 px-1 text-[11px] sm:text-xs font-bold rounded-xl transition flex items-center justify-center gap-1 min-w-0 ${
             activeSubTab === 'DIRECTORY'
               ? 'bg-[#673AB7] text-white shadow-xs'
               : 'text-gray-600 hover:text-gray-900'
           }`}
         >
-          <Home className="w-4 h-4" />
-          <span>Resident Directory ({directory.length})</span>
+          <Home className="w-3.5 h-3.5 shrink-0" />
+          <span className="truncate">Directory ({directory.length})</span>
         </button>
 
         <button
+          type="button"
           onClick={() => setActiveSubTab('MESSAGES')}
-          className={`flex-1 py-2 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 relative ${
+          className={`flex-1 py-2 px-1 text-[11px] sm:text-xs font-bold rounded-xl transition flex items-center justify-center gap-1 relative min-w-0 ${
             activeSubTab === 'MESSAGES'
               ? 'bg-[#673AB7] text-white shadow-xs'
               : 'text-gray-600 hover:text-gray-900'
           }`}
         >
-          <MessageSquare className="w-4 h-4" />
-          <span>Gate Instructions</span>
+          <MessageSquare className="w-3.5 h-3.5 shrink-0" />
+          <span className="truncate">Instructions</span>
           {unreadCount > 0 && (
-            <span className="bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.2 rounded-full min-w-[16px] text-center">
+            <span className="bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.2 rounded-full min-w-[16px] text-center shrink-0">
               {unreadCount}
             </span>
           )}
@@ -109,37 +111,39 @@ export const GuardDirectoryView: React.FC<GuardDirectoryViewProps> = ({
             {filteredDirectory.map((r) => (
               <div
                 key={r.uid}
-                className="p-3.5 rounded-2xl bg-white border border-[#E6F1F5] shadow-xs flex items-center justify-between gap-3"
+                className="p-3.5 rounded-2xl bg-white border border-[#E6F1F5] shadow-xs flex items-center justify-between gap-2 sm:gap-3 min-w-0"
               >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-purple-50 text-[#673AB7] font-extrabold flex items-center justify-center text-sm">
+                <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-purple-50 text-[#673AB7] font-extrabold flex items-center justify-center text-xs sm:text-sm shrink-0">
                     {r.fullName.charAt(0)}
                   </div>
-                  <div>
-                    <div className="flex items-center gap-1.5">
-                      <h4 className="font-bold text-xs text-gray-900">{r.fullName}</h4>
-                      <span className="text-[10px] px-1.5 py-0.2 bg-purple-50 text-[#673AB7] rounded-md font-semibold">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <h4 className="font-bold text-xs text-gray-900 truncate max-w-[140px] sm:max-w-none">
+                        {r.fullName}
+                      </h4>
+                      <span className="text-[9px] sm:text-[10px] px-1.5 py-0.2 bg-purple-50 text-[#673AB7] rounded-md font-semibold shrink-0">
                         {r.occupantType}
                       </span>
                     </div>
-                    <p className="text-[11px] text-gray-500 font-medium">
+                    <p className="text-[11px] text-gray-500 font-medium truncate">
                       {r.buildingName} • Flat <strong className="text-gray-900">{r.flatNumber}</strong>
                     </p>
                     {r.intercomNumber && (
-                      <p className="text-[10px] text-gray-400 font-mono">
-                        Intercom Ext: #{r.intercomNumber}
+                      <p className="text-[10px] text-gray-400 font-mono truncate">
+                        Ext: #{r.intercomNumber}
                       </p>
                     )}
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                   <a
                     href={`tel:${r.phoneNumber}`}
                     className="p-2 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition flex items-center gap-1 text-xs font-bold"
                   >
                     <Phone className="w-3.5 h-3.5" />
-                    <span className="text-[11px]">Call</span>
+                    <span className="text-[11px] hidden xs:inline">Call</span>
                   </a>
                 </div>
               </div>

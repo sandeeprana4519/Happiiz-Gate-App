@@ -24,6 +24,7 @@ import { GuardWaitingView } from '../../components/guard/GuardWaitingView';
 import { GuardInsideView } from '../../components/guard/GuardInsideView';
 import { GuardDirectoryView } from '../../components/guard/GuardDirectoryView';
 import { GuardAlertsAndProfileView } from '../../components/guard/GuardAlertsAndProfileView';
+import { GuardPreApprovedView } from '../../components/guard/GuardPreApprovedView';
 import { guardService } from '../../services/firebase/guard.service';
 import { syncBus } from '../../services/firebase/sync.service';
 import { soundAlert } from '../../utils/soundAlert';
@@ -53,16 +54,29 @@ import {
 } from 'lucide-react';
 
 export const SecurityGuardDashboard: React.FC = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, activeMembership } = useAuth();
   const navigate = useNavigate();
 
   // Guard Terminal Identity & Assigned Gate
-  const [activeGate, setActiveGate] = useState('Gate A, West Corner');
-  const societyId = user?.societyId || 'soc_emerald_heights';
-  const guardProfile: GuardProfileInfo = guardService.getGuardSession(user);
+  const assignedGateFromAuth = activeMembership?.gateAssigned || (user as any)?.gateAssigned;
+  const storageKey = 'hpz_active_gate_' + (user?.uid || 'guard');
+  const [activeGate, setActiveGate] = useState<string>(() => {
+    return localStorage.getItem(storageKey) || assignedGateFromAuth || 'Gate #1 (North Main)';
+  });
+  const societyId = user?.societyId || activeMembership?.societyId || 'soc_emerald_heights';
+  const guardProfile: GuardProfileInfo = guardService.getGuardSession({
+    ...user,
+    gateAssigned: activeGate,
+    societyId,
+  });
 
-  // Active Navigation Tab: 'home' | 'waiting' | 'inside' | 'directory' | 'alerts'
-  const [activeTab, setActiveTab] = useState<GuardBottomTab>('home');
+  const handleSelectGate = (gate: string) => {
+    setActiveGate(gate);
+    localStorage.setItem(storageKey, gate);
+  };
+
+  // Active Navigation Tab: 'home' | 'waiting' | 'inside' | 'directory' | 'alerts' | 'preapproved'
+  const [activeTab, setActiveTab] = useState<GuardBottomTab | 'preapproved'>('home');
 
   // Keypad & Pass Verification State
   const [enteredCode, setEnteredCode] = useState('');
@@ -265,6 +279,7 @@ export const SecurityGuardDashboard: React.FC = () => {
   // Map top nav tabs to bottom nav views
   const handleTopNavChange = (tab: GuardNavTab) => {
     if (tab === 'home') setActiveTab('home');
+    else if (tab === 'preapproved') setActiveTab('preapproved');
     else if (tab === 'inout') setActiveTab('inside');
     else if (tab === 'message') setActiveTab('directory');
   };
@@ -273,128 +288,132 @@ export const SecurityGuardDashboard: React.FC = () => {
   const insideVisitorsCount = visitors.filter((v) => v.status === 'INSIDE').length;
   const activeEmergenciesCount = emergencies.filter((e) => e.status !== 'RESOLVED').length;
   const unreadMessagesCount = messages.filter((m) => !m.isRead).length;
+  const preApprovedList = visitors.filter((v) => v.isPreApproved || v.status === 'APPROVED');
 
   return (
-    <div className="min-h-screen bg-[#FFFFFF] text-[#111111] pb-24 select-none relative font-sans antialiased">
+    <div className="w-full max-w-full select-none relative font-sans antialiased min-h-screen pb-20 sm:pb-22 overflow-x-hidden bg-[#FFFFFF] text-[#111111] no-scrollbar">
       {/* 1. STICKY OFFLINE BANNER */}
       <GuardOfflineBanner />
 
-      {/* 2. BLACK HEADER (Gate Name + Switch Gate / Handover Menu) */}
-      <GuardHeader gateName={activeGate} onSelectGate={(g) => setActiveGate(g)} />
+      {/* 2. BLACK HEADER (Gate Name + Notification Bell + Switch Gate / Handover Menu) */}
+      <GuardHeader
+        gateName={activeGate}
+        onSelectGate={handleSelectGate}
+        unreadCount={activeEmergenciesCount + unreadMessagesCount}
+        emergenciesCount={activeEmergenciesCount}
+        messagesCount={unreadMessagesCount}
+        onNotificationPress={() => setActiveTab('alerts')}
+      />
 
-      {/* 3. TOP NAVIGATION (Home, In-Out, Message matching Reference Screenshot 2) */}
+      {/* 3. TOP NAVIGATION (Home, Pre-App, In-Out, Message) */}
       <GuardTopNav
-        activeTab={activeTab === 'home' ? 'home' : activeTab === 'inside' ? 'inout' : 'message'}
+        activeTab={
+          activeTab === 'home'
+            ? 'home'
+            : activeTab === 'preapproved'
+            ? 'preapproved'
+            : activeTab === 'inside'
+            ? 'inout'
+            : 'message'
+        }
         onTabChange={handleTopNavChange}
+        preApprovedCount={preApprovedList.length}
         inOutCount={insideVisitorsCount}
         unreadMessagesCount={unreadMessagesCount}
       />
 
-      <main className="max-w-lg mx-auto">
+      <main
+        className={`w-full max-w-lg mx-auto min-w-0 px-3 sm:px-4 no-scrollbar ${
+          activeTab === 'home'
+            ? 'py-2 sm:py-3 space-y-4 sm:space-y-5'
+            : 'pt-2 pb-6 overflow-x-hidden'
+        }`}
+      >
         {/* ======================================================== */}
-        {/* TAB 1: HOME (Exact Recreation of Reference Screenshot 2) */}
+        {/* TAB 1: HOME (Add Visitor, Code Box & Numeric Keypad)     */}
         {/* ======================================================== */}
         {activeTab === 'home' && (
-          <div className="space-y-4 pt-1 animate-fade-in">
-            {/* SIX-DIGIT VISITOR CODE BOX */}
-            <VisitorCodeInput code={enteredCode} length={6} />
-
-            {/* Error / Rate Limiting Alert */}
-            {keypadError && (
-              <div className="mx-6 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600" />
-                <span>{keypadError}</span>
-              </div>
-            )}
-
-            {verifyingCode && (
-              <div className="text-center text-xs font-bold text-[#673AB7] flex items-center justify-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-[#673AB7] animate-ping" />
-                Verifying digital gate code...
-              </div>
-            )}
-
-            {/* NUMERIC KEYPAD (3 Columns: 1-9, QR in Purple, 0, Delete) */}
-            <NumericKeypad
-              onDigitPress={handleDigitPress}
-              onDeletePress={handleDeletePress}
-              onQrPress={() => setShowQrModal(true)}
-              disabled={verifyingCode}
-            />
-
-            {/* ADD NEW VISITOR SECTION (Horizontal scrollable cards with 3D figures) */}
-            <section className="px-5 pt-1 space-y-3">
-              <div className="flex items-center justify-between">
-                <h2 className="text-sm font-extrabold text-[#111111] tracking-wider uppercase">
+          <div className="flex flex-col animate-fade-in w-full min-w-0 space-y-3.5 sm:space-y-4 pt-1 pb-4">
+            {/* 1. ADD NEW VISITOR SECTION (Directly below header) */}
+            <section className="space-y-2 w-full min-w-0">
+              <div className="flex items-center justify-between px-0.5">
+                <h2 className="text-xs sm:text-sm font-extrabold text-[#111111] tracking-wider uppercase">
                   ADD NEW VISITOR
                 </h2>
-                <span className="text-[11px] font-bold text-[#673AB7] hover:underline cursor-pointer">
+                <button
+                  type="button"
+                  onClick={() => setSelectedVisitorCategory('Guest')}
+                  className="text-xs sm:text-sm font-bold text-[#673AB7] hover:underline cursor-pointer"
+                >
                   Fast Register
-                </span>
+                </button>
               </div>
 
-              {/* Horizontal Scrollable Category Cards matching Screenshot 2 */}
-              <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2 -mx-4 px-4 sm:mx-0 sm:px-0">
+              {/* 4 Visitor Cards in ONE SINGLE ROW on mobile: Guest | Delivery | Service | Cab */}
+              <div className="grid grid-cols-4 gap-2 sm:gap-2.5 w-full min-w-0">
                 <VisitorCategoryCard
                   title="Guest"
-                  illustration={<GuestIllustration3D size={105} />}
+                  illustration={<GuestIllustration3D size={38} />}
                   onClick={() => setSelectedVisitorCategory('Guest')}
                 />
                 <VisitorCategoryCard
                   title="Delivery"
-                  illustration={<DeliveryIllustration3D size={105} />}
+                  illustration={<DeliveryIllustration3D size={38} />}
                   onClick={() => setSelectedVisitorCategory('Delivery')}
                 />
                 <VisitorCategoryCard
                   title="Service"
-                  illustration={<ServiceIllustration3D size={105} />}
+                  illustration={<ServiceIllustration3D size={38} />}
                   onClick={() => setSelectedVisitorCategory('Service')}
                 />
                 <VisitorCategoryCard
                   title="Cab"
-                  illustration={<CabIllustration3D size={105} />}
+                  illustration={<CabIllustration3D size={38} />}
                   onClick={() => setSelectedVisitorCategory('Cab')}
                 />
               </div>
             </section>
 
-            {/* LIVE KPI METRICS TICKER */}
-            {kpiStats && (
-              <section className="px-5 pt-2 pb-4 space-y-2">
-                <h3 className="text-xs font-bold text-[#A9B0B8] uppercase tracking-wider">
-                  Gate Station Overview
-                </h3>
-                <div className="grid grid-cols-3 gap-2.5">
-                  <div
-                    onClick={() => setActiveTab('waiting')}
-                    className="p-3 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] text-center cursor-pointer hover:border-[#673AB7] transition-all"
-                  >
-                    <p className="text-xl font-extrabold text-amber-600">
-                      {kpiStats.waitingApproval}
-                    </p>
-                    <p className="text-[10px] font-bold text-[#64748B] mt-0.5">Waiting Queue</p>
-                  </div>
-                  <div
-                    onClick={() => setActiveTab('inside')}
-                    className="p-3 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] text-center cursor-pointer hover:border-[#673AB7] transition-all"
-                  >
-                    <p className="text-xl font-extrabold text-[#673AB7]">
-                      {kpiStats.visitorsInside}
-                    </p>
-                    <p className="text-[10px] font-bold text-[#64748B] mt-0.5">Inside Campus</p>
-                  </div>
-                  <div
-                    onClick={() => setActiveTab('alerts')}
-                    className="p-3 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] text-center cursor-pointer hover:border-[#673AB7] transition-all"
-                  >
-                    <p className="text-xl font-extrabold text-emerald-600">
-                      {kpiStats.preApprovedCount}
-                    </p>
-                    <p className="text-[10px] font-bold text-[#64748B] mt-0.5">Pre-Approved</p>
-                  </div>
-                </div>
-              </section>
+            {/* 2. SIX-DIGIT VISITOR CODE BOX */}
+            <VisitorCodeInput code={enteredCode} length={6} />
+
+            {/* Error / Rate Limiting Alert */}
+            {keypadError && (
+              <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center gap-2 shrink-0 animate-shake">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600" />
+                <span className="truncate">{keypadError}</span>
+              </div>
             )}
+
+            {verifyingCode && (
+              <div className="text-center text-xs font-bold text-[#673AB7] flex items-center justify-center gap-2 py-1 shrink-0">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#673AB7] animate-ping" />
+                Verifying digital gate code...
+              </div>
+            )}
+
+            {/* 3. NUMERIC KEYPAD (3 Columns: 1-9, QR in Purple, 0, Delete) */}
+            <div className="w-full flex justify-center py-1">
+              <NumericKeypad
+                onDigitPress={handleDigitPress}
+                onDeletePress={handleDeletePress}
+                onQrPress={() => setShowQrModal(true)}
+                disabled={verifyingCode}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* ======================================================== */}
+        {/* TAB 1.5: PRE-APPROVED (Resident Pre-Approved Passes)     */}
+        {/* ======================================================== */}
+        {activeTab === 'preapproved' && (
+          <div className="pt-2 animate-fade-in w-full min-w-0">
+            <GuardPreApprovedView
+              visitors={visitors}
+              onFastTrackCheckIn={handleFastTrackCheckIn}
+              onRefresh={loadData}
+            />
           </div>
         )}
 
@@ -402,7 +421,7 @@ export const SecurityGuardDashboard: React.FC = () => {
         {/* TAB 2: WAITING (Live Approval Queue & Resident Decision) */}
         {/* ======================================================== */}
         {activeTab === 'waiting' && (
-          <div className="px-4 sm:px-6 pt-4 animate-fade-in">
+          <div className="pt-2 animate-fade-in w-full min-w-0">
             <GuardWaitingView
               visitors={visitors}
               onAllowEntry={handleAllowEntryDirect}
@@ -414,10 +433,10 @@ export const SecurityGuardDashboard: React.FC = () => {
         )}
 
         {/* ======================================================== */}
-        {/* TAB 3: INSIDE (Inside Visitors & Exit Check-Out) */}
+        {/* TAB 3: INSIDE / IN-OUT (In & Out Tabs + Exit Logs)       */}
         {/* ======================================================== */}
         {activeTab === 'inside' && (
-          <div className="px-4 sm:px-6 pt-4 animate-fade-in">
+          <div className="pt-2 animate-fade-in w-full min-w-0">
             <GuardInsideView
               visitors={visitors}
               activeGate={activeGate}
@@ -432,7 +451,7 @@ export const SecurityGuardDashboard: React.FC = () => {
         {/* TAB 4: DIRECTORY & MESSAGES (Safe Resident Phonebook) */}
         {/* ======================================================== */}
         {activeTab === 'directory' && (
-          <div className="px-4 sm:px-6 pt-4 animate-fade-in">
+          <div className="pt-2 animate-fade-in w-full min-w-0">
             <GuardDirectoryView
               directory={directory}
               messages={messages}
@@ -442,10 +461,10 @@ export const SecurityGuardDashboard: React.FC = () => {
         )}
 
         {/* ======================================================== */}
-        {/* TAB 5: SOS ALERTS, PRE-APPROVED, HISTORY & PROFILE */}
+        {/* TAB 5: SOS ALERTS & PROFILE */}
         {/* ======================================================== */}
         {activeTab === 'alerts' && (
-          <div className="px-4 sm:px-6 pt-4 animate-fade-in">
+          <div className="pt-2 animate-fade-in w-full min-w-0">
             <GuardAlertsAndProfileView
               emergencies={emergencies}
               visitors={visitors}
@@ -463,7 +482,7 @@ export const SecurityGuardDashboard: React.FC = () => {
       {/* 4. MOBILE BOTTOM NAVIGATION (5 TABS + FLOATING QR SCANNER) */}
       {/* ======================================================== */}
       <GuardBottomNav
-        activeTab={activeTab}
+        activeTab={activeTab === 'preapproved' ? 'alerts' : activeTab}
         onTabChange={(tab) => setActiveTab(tab)}
         waitingCount={waitingVisitorsCount}
         insideCount={insideVisitorsCount}

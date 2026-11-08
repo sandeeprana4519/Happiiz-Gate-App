@@ -20,10 +20,10 @@ export const AppLayout: React.FC = () => {
 
   if (isDedicatedMobileScreen) {
     return (
-      <div className="min-h-screen bg-[#FFFFFF] text-[#111111] flex flex-col">
+      <div className="min-h-screen bg-[#FFFFFF] text-[#111111] flex flex-col w-full max-w-full overflow-x-hidden no-scrollbar">
         <OfflineIndicator />
         <PWAInstallPrompt />
-        <main className="flex-1 w-full">
+        <main className="flex-1 w-full max-w-full overflow-x-hidden no-scrollbar">
           <Outlet />
         </main>
       </div>

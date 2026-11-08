@@ -24,7 +24,7 @@ export const Header: React.FC = () => {
   };
 
   const navItems = [
-    { label: 'Gate Sentinel', path: '/dashboard/guard' },
+    { label: 'Gate Guard', path: '/dashboard/guard' },
     { label: 'Resident Portal', path: '/dashboard/resident' },
     { label: 'Service Partner', path: '/dashboard/service-partner' },
   ];
@@ -112,9 +112,9 @@ export const Header: React.FC = () => {
         ) : (
           <Link
             to="/login"
-            className="hidden sm:inline-flex text-xs font-semibold px-3.5 py-1.5 rounded-xl bg-[#673AB7] text-white hover:bg-[#512DA8] shadow-xs transition-colors"
+            className="hidden sm:inline-flex text-xs font-semibold px-4 py-1.5 rounded-xl bg-[#673AB7] text-white hover:bg-[#512DA8] shadow-xs transition-colors"
           >
-            Sign In
+            Login
           </Link>
         )}
 
@@ -129,7 +129,7 @@ export const Header: React.FC = () => {
         </button>
       </div>
 
-      {/* Mobile Navigation Dropdown: Only Gate Sentinel, Resident Portal, Service Partner */}
+      {/* Mobile Navigation Dropdown: Only Gate Guard, Resident Portal, Service Partner */}
       {mobileMenuOpen && (
         <div className="md:hidden absolute top-16 left-0 w-full bg-[#FFFFFF] border-b border-[#E6F1F5] shadow-lg p-4 space-y-2 animate-fade-in z-50">
           <nav className="flex flex-col space-y-1">
@@ -159,7 +159,7 @@ export const Header: React.FC = () => {
                 onClick={() => setMobileMenuOpen(false)}
                 className="w-full py-2.5 rounded-xl bg-[#673AB7] text-white text-xs font-bold flex items-center justify-center hover:bg-[#512DA8] transition-colors"
               >
-                Sign In with Mobile OTP
+                Login
               </Link>
             </div>
           )}
