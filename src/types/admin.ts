@@ -4,6 +4,7 @@
  */
 
 import { UserRole, MembershipStatus } from './auth';
+import { EntityDocument } from './society';
 
 export interface SubscriptionPlan {
   id: string;
@@ -183,8 +184,9 @@ export interface PlatformStaffMember {
 export interface ManagedCompany {
   id: string;
   companyName: string;
+  companyCode?: string;
   registrationNumber?: string;
-  companyType: 'Commercial Building' | 'Corporate Campus' | 'Factory' | 'Tech Park' | 'Enterprise';
+  companyType: 'Commercial Building' | 'Corporate Campus' | 'Factory' | 'Tech Park' | 'Enterprise' | string;
   address: string;
   city: string;
   state: string;
@@ -193,10 +195,16 @@ export interface ManagedCompany {
   contactPhone: string;
   adminUid?: string;
   adminName?: string;
+  adminLoginEmail?: string;
+  adminPassword?: string;
   totalBuildings: number;
   totalOffices: number;
-  status: 'ACTIVE' | 'PENDING' | 'SUSPENDED';
+  totalGates?: number;
+  status: 'ACTIVE' | 'INACTIVE' | 'PENDING' | 'SUSPENDED';
   subscriptionPlan: string;
+  subscriptionType?: string;
+  subscriptionDuration?: string;
+  documents?: EntityDocument[];
   registeredAt: string;
 }
 

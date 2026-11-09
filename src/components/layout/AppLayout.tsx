@@ -13,12 +13,12 @@ import { PWAInstallPrompt } from './PWAInstallPrompt';
 export const AppLayout: React.FC = () => {
   const location = useLocation();
 
-  // Resident and Guard screens have their own dedicated mobile headers & bottom navs
-  const isDedicatedMobileScreen =
-    location.pathname === '/dashboard/resident' ||
-    location.pathname === '/dashboard/guard';
+  // Dedicated portal dashboards (Super Admin, Society Admin, Resident, Guard, Service Partner)
+  // manage their own dedicated navigation, headers, sidebars, and full-screen layouts.
+  // They should never render the public website marketing Header and Footer.
+  const isDedicatedPortalScreen = location.pathname.startsWith('/dashboard');
 
-  if (isDedicatedMobileScreen) {
+  if (isDedicatedPortalScreen) {
     return (
       <div className="min-h-screen bg-[#FFFFFF] text-[#111111] flex flex-col w-full max-w-full overflow-x-hidden no-scrollbar">
         <OfflineIndicator />

@@ -32,6 +32,7 @@ import { ResidentAmenitiesModal } from '../../components/resident/ResidentAmenit
 import { ResidentServicesModal } from '../../components/resident/ResidentServicesModal';
 import { ResidentCommunityModal } from '../../components/resident/ResidentCommunityModal';
 import { ResidentMessageSecurityModal } from '../../components/resident/ResidentMessageSecurityModal';
+import { ResidentProfileModal } from '../../components/resident/ResidentProfileModal';
 
 import { residentService } from '../../services/firebase/resident.service';
 import { syncBus } from '../../services/firebase/sync.service';
@@ -82,6 +83,8 @@ export const ResidentDashboard: React.FC = () => {
   const [openCommunity, setOpenCommunity] = useState(false);
   const [openMessageSecurity, setOpenMessageSecurity] = useState(false);
   const [openEmergencySos, setOpenEmergencySos] = useState(false);
+  const [openProfile, setOpenProfile] = useState(false);
+  const [profileTab, setProfileTab] = useState<'profile' | 'password'>('password');
 
   // Activity filter state
   const [activityFilter, setActivityFilter] = useState<'TODAY' | 'UPCOMING' | 'HISTORY'>('TODAY');
@@ -159,10 +162,19 @@ export const ResidentDashboard: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#FFFFFF] text-[#111111] pb-24 select-none relative font-sans antialiased">
-      {/* 1. TOP HEADER (Reference Screenshot 1: Bell with red badge 2, Happiiz Gate, Avatar) */}
-      <ResidentHeader />
+      {/* 1. TOP HEADER (Black Header: Bell, Centered SOS, Three Dots, Welcome & Resident Details) */}
+      <ResidentHeader
+        residentName={residentName}
+        flatNumber={flatNumber}
+        societyName={societyName}
+        onSosClick={() => setOpenEmergencySos(true)}
+        onOpenProfile={(tab) => {
+          setProfileTab(tab || 'password');
+          setOpenProfile(true);
+        }}
+      />
 
-      <main className="max-w-lg mx-auto px-4 sm:px-6 pt-5 space-y-6">
+      <main className="max-w-lg mx-auto px-3 sm:px-4 pt-3 space-y-4">
         {/* INCOMING VISITOR ALERT BANNER (If a visitor is waiting at gate) */}
         {incomingVisitor && (
           <div
@@ -180,7 +192,7 @@ export const ResidentDashboard: React.FC = () => {
             </div>
             <button
               onClick={() => handleAcceptIncoming(incomingVisitor.id)}
-              className="px-3.5 py-1.5 rounded-xl bg-white text-amber-950 font-black text-xs shadow-sm hover:bg-amber-100 transition-colors"
+              className="px-3.5 py-1.5 rounded-xl bg-white text-amber-950 font-black text-xs shadow-sm hover:bg-amber-100 transition-colors cursor-pointer"
             >
               Approve
             </button>
@@ -188,61 +200,52 @@ export const ResidentDashboard: React.FC = () => {
         )}
 
         {/* ======================================================== */}
-        {/* TAB 1: HOME (Exact Recreation of Reference Screenshot 1) */}
+        {/* TAB 1: HOME (Compact 4-Tile Row matching Gate Guard)      */}
         {/* ======================================================== */}
         {activeTab === 'home' && (
-          <div className="space-y-6 animate-fade-in">
-            {/* RESIDENT GREETING & FLAT COORDINATES */}
-            <div className="flex items-center justify-between pt-1">
-              <div>
-                <h1 className="text-lg font-black text-[#111111] tracking-tight">
-                  Welcome, {residentName}
-                </h1>
-                <p className="text-xs text-[#A9B0B8] font-medium">
-                  Flat <strong className="text-[#673AB7]">{flatNumber}</strong> · {societyName}
-                </p>
-              </div>
-              <button
-                onClick={() => setOpenEmergencySos(true)}
-                className="px-3 py-1.5 rounded-2xl bg-red-50 border border-red-200 text-red-600 font-extrabold text-xs flex items-center gap-1.5 hover:bg-red-100 transition-colors cursor-pointer"
-              >
-                <ShieldAlert className="w-3.5 h-3.5" />
-                <span>SOS</span>
-              </button>
-            </div>
+          <div className="space-y-4 animate-fade-in">
 
-            {/* SECTION 1: PRE APPROVE VISITOR (Reference Screenshot 1) */}
-            <section className="space-y-3">
-              <div>
-                <h2 className="text-xl sm:text-2xl font-extrabold text-[#111111] tracking-tight">
-                  Pre Approve Visitor
-                </h2>
-                <p className="text-xs sm:text-sm text-[#A9B0B8] mt-0.5">
-                  Add visitor details for quick entries
-                </p>
+            {/* SECTION 1: PRE APPROVE VISITOR (Compact 4-Tile Row matching Gate Guard) */}
+            <section className="space-y-2 w-full min-w-0">
+              <div className="flex items-center justify-between px-0.5">
+                <div>
+                  <h2 className="text-xs sm:text-sm font-extrabold text-[#111111] tracking-wider uppercase">
+                    PRE APPROVE VISITOR
+                  </h2>
+                  <p className="text-[11px] text-[#64748B]">
+                    Add visitor details for quick entries (त्वरित प्रवेश)
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPreApproveCategory('Guest')}
+                  className="text-xs font-bold text-[#673AB7] hover:underline cursor-pointer"
+                >
+                  + Fast Entry
+                </button>
               </div>
 
-              {/* Horizontal Scrollable Category Cards with 3D Illustrations */}
-              <div className="flex gap-3 overflow-x-auto no-scrollbar pb-1 pt-1 -mx-4 px-4 sm:mx-0 sm:px-0">
+              {/* 4 Visitor Cards in ONE SINGLE ROW on mobile: Guest | Delivery | Service | Cab */}
+              <div className="grid grid-cols-4 gap-2 sm:gap-2.5 w-full min-w-0">
                 <VisitorCategoryCard
-                  title={'Add\nGuest'}
-                  illustration={<GuestIllustration3D size={105} />}
+                  title="Guest"
+                  illustration={<GuestIllustration3D size={38} />}
                   onClick={() => setPreApproveCategory('Guest')}
                 />
                 <VisitorCategoryCard
-                  title={'Add\nDelivery'}
-                  illustration={<DeliveryIllustration3D size={105} />}
+                  title="Delivery"
+                  illustration={<DeliveryIllustration3D size={38} />}
                   onClick={() => setPreApproveCategory('Delivery')}
                 />
                 <VisitorCategoryCard
-                  title={'Add\nService'}
-                  illustration={<ServiceIllustration3D size={105} />}
+                  title="Service"
+                  illustration={<ServiceIllustration3D size={38} />}
                   onClick={() => setPreApproveCategory('Service')}
                 />
                 <VisitorCategoryCard
-                  title={'Add\nCab'}
-                  illustration={<CabIllustration3D size={105} />}
-                  onClick={() => setOpenAllowCab(true)}
+                  title="Cab"
+                  illustration={<CabIllustration3D size={38} />}
+                  onClick={() => setPreApproveCategory('Cab')}
                 />
               </div>
             </section>
@@ -693,6 +696,13 @@ export const ResidentDashboard: React.FC = () => {
         flatNumber={flatNumber}
         residentUid={residentUid}
         residentName={residentName}
+      />
+
+      {/* In-App Mobile Profile & Password Security Modal */}
+      <ResidentProfileModal
+        isOpen={openProfile}
+        onClose={() => setOpenProfile(false)}
+        initialTab={profileTab}
       />
     </div>
   );

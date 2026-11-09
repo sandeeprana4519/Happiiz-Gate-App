@@ -28,14 +28,17 @@ export const PartnerBottomNav: React.FC<PartnerBottomNavProps> = ({
   const tabs: { id: PartnerTab; label: string; icon: React.FC<{ className?: string }>; badge?: number }[] = [
     { id: 'home', label: 'Home', icon: Home },
     { id: 'bookings', label: 'Bookings', icon: Briefcase, badge: newRequestsCount },
-    { id: 'calendar', label: 'Calendar', icon: Calendar },
+    { id: 'calendar', label: 'Schedule', icon: Calendar },
     { id: 'earnings', label: 'Earnings', icon: Wallet },
     { id: 'profile', label: 'Profile', icon: User },
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-[#E6F1F5] shadow-lg max-w-lg mx-auto pb-safe select-none">
-      <div className="grid grid-cols-5 h-16 items-center px-2">
+    <nav
+      aria-label="Service Partner Mobile Navigation"
+      className="fixed bottom-0 left-0 right-0 z-40 bg-[#000000] border-t border-slate-900 shadow-[0_-4px_25px_rgba(0,0,0,0.6)] max-w-lg mx-auto w-full select-none pb-safe"
+    >
+      <div className="grid grid-cols-5 h-16 sm:h-18 items-center px-1 sm:px-2 relative w-full">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -45,21 +48,33 @@ export const PartnerBottomNav: React.FC<PartnerBottomNavProps> = ({
               key={tab.id}
               type="button"
               onClick={() => onTabChange(tab.id)}
-              className={`flex flex-col items-center justify-center py-1 transition-colors relative cursor-pointer ${
-                isActive ? 'text-[#673AB7] font-bold' : 'text-slate-400 hover:text-slate-600'
+              className={`flex flex-col items-center justify-center py-1 transition-colors relative cursor-pointer group active:scale-95 ${
+                isActive ? 'text-white font-bold' : 'text-[#9DA3AD] hover:text-white'
               }`}
+              aria-label={tab.label}
             >
               <div className="relative">
-                <Icon className={`w-5 h-5 ${isActive ? 'stroke-[2.5]' : 'stroke-[1.8]'}`} />
+                <Icon
+                  className={`w-5 h-5 transition-transform group-hover:scale-110 ${
+                    isActive ? 'stroke-[2.5] text-white scale-110' : 'stroke-[1.8] text-[#9DA3AD]'
+                  }`}
+                />
                 {tab.badge !== undefined && tab.badge > 0 && (
-                  <span className="absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center ring-2 ring-white animate-pulse">
+                  <span className="absolute -top-1.5 -right-2.5 min-w-[16px] h-4 px-1 rounded-full bg-[#E53945] text-white text-[9px] font-extrabold flex items-center justify-center ring-2 ring-black animate-pulse shadow-sm">
                     {tab.badge}
                   </span>
                 )}
               </div>
-              <span className={`text-[10px] mt-1 ${isActive ? 'font-black text-[#673AB7]' : 'font-medium text-slate-500'}`}>
+              <span
+                className={`text-[10px] mt-1 tracking-tight ${
+                  isActive ? 'text-white font-bold' : 'text-[#9DA3AD]'
+                }`}
+              >
                 {tab.label}
               </span>
+              {isActive && (
+                <span className="w-4 h-0.5 bg-[#673AB7] rounded-full mt-0.5" />
+              )}
             </button>
           );
         })}

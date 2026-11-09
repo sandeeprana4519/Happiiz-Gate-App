@@ -1,5 +1,7 @@
 import React from 'react';
-import { Search, Menu, AlertTriangle, ShieldCheck, UserCheck } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
+import { Search, Menu, AlertTriangle, ShieldCheck, UserCheck, LogOut, User } from 'lucide-react';
 import { SocietyAdminRole } from '../../types/societyAdmin';
 
 interface SocietyAdminHeaderProps {
@@ -29,6 +31,14 @@ export const SocietyAdminHeader: React.FC<SocietyAdminHeaderProps> = ({
   activeRole = 'SOCIETY_ADMIN',
   onRoleChange,
 }) => {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
+  };
+
   return (
     <div className="bg-[#FFFFFF] border-b border-[#E6F1F5] px-4 sm:px-6 py-3.5 sticky top-0 z-20 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
@@ -105,6 +115,34 @@ export const SocietyAdminHeader: React.FC<SocietyAdminHeaderProps> = ({
           )}
 
           {actionButton}
+
+          {/* Admin Profile & Logout */}
+          <div className="flex items-center gap-2 pl-2 border-l border-[#E6F1F5]">
+            <div className="flex items-center gap-2">
+              <div
+                className="w-8 h-8 rounded-xl bg-[#673AB7]/10 text-[#673AB7] flex items-center justify-center font-bold text-xs"
+                title={user?.displayName || 'Society Admin'}
+              >
+                <User className="w-4 h-4" />
+              </div>
+              <div className="hidden xl:block text-left">
+                <p className="text-xs font-bold text-[#111111] leading-tight truncate max-w-[120px]">
+                  {user?.displayName || 'Society Admin'}
+                </p>
+                <p className="text-[10px] text-[#A9B0B8] leading-tight">Admin</p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-red-200 bg-red-50/50 hover:bg-red-50 text-red-600 hover:text-red-700 transition-all text-xs font-bold cursor-pointer"
+              title="Sign Out / लॉगआउट करें"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Logout</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

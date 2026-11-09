@@ -77,13 +77,6 @@ export const SuperAdminSidebar: React.FC<SuperAdminSidebarProps> = ({
     { id: 'dashboard', label: 'Master Dashboard', icon: LayoutDashboard, category: 'Core' },
     { id: 'societies', label: 'Societies', icon: Building2, category: 'Ecosystem' },
     { id: 'companies', label: 'Companies', icon: Briefcase, category: 'Ecosystem' },
-    {
-      id: 'onboarding',
-      label: 'Onboarding',
-      icon: ClipboardList,
-      badge: pendingApprovalsCount,
-      category: 'Ecosystem',
-    },
     { id: 'subscriptions', label: 'Subscriptions', icon: CreditCard, category: 'Billing' },
     { id: 'finance', label: 'Billing & Revenue', icon: DollarSign, category: 'Billing' },
     { id: 'partners', label: 'Service Partners', icon: Wrench, category: 'Marketplace' },

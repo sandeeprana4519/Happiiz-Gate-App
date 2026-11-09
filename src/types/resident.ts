@@ -35,6 +35,8 @@ export interface ResidentGatePass {
   photoUrl?: string;
   companyName?: string;
   vehiclePlate?: string;
+  vehicleType?: 'None' | 'Bike' | 'Car' | 'Auto' | 'E-Rickshaw' | 'Other';
+  vehicleNumber?: string;
   instructions?: string;
   entryAt?: string;
   exitAt?: string;

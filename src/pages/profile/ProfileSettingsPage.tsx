@@ -14,6 +14,7 @@ import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { StatusBadge, MetadataText } from '../../components/common/Badge';
 import { SUPPORTED_LANGUAGES, USER_ROLES } from '../../config/constants';
 import { updateFirestoreUserProfile } from '../../services/firebase/firestore.service';
+import { updateUserAccountPassword } from '../../services/firebase/auth.service';
 import {
   User,
   Phone,
@@ -28,6 +29,10 @@ import {
   AlertTriangle,
   ArrowRight,
   ChevronRight,
+  Lock,
+  Key,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 
 export const ProfileSettingsPage: React.FC = () => {
@@ -47,6 +52,49 @@ export const ProfileSettingsPage: React.FC = () => {
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Password Update State
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [updatingPassword, setUpdatingPassword] = useState(false);
+  const [passwordSuccess, setPasswordSuccess] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+
+  const handleUpdatePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user?.uid) return;
+    setPasswordError(null);
+    setPasswordSuccess(false);
+
+    if (!newPassword || newPassword.length < 6) {
+      setPasswordError('New password must be at least 6 characters long.');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPasswordError('New password and confirm password do not match.');
+      return;
+    }
+
+    setUpdatingPassword(true);
+
+    try {
+      await updateUserAccountPassword(user.uid, newPassword, currentPassword);
+      setPasswordSuccess(true);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setTimeout(() => setPasswordSuccess(false), 4000);
+    } catch (err: any) {
+      setPasswordError(err.message || 'Failed to update password.');
+    } finally {
+      setUpdatingPassword(false);
+    }
+  };
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -204,6 +252,131 @@ export const ProfileSettingsPage: React.FC = () => {
             leftIcon={<Save className="w-4 h-4" />}
           >
             Save Profile Changes
+          </Button>
+        </form>
+      </GlassCard>
+
+      {/* Security: Password Update Card */}
+      <GlassCard elevated className="border-amber-500/20 p-6 sm:p-8 space-y-4">
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+          <div className="flex items-center gap-2">
+            <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center">
+              <Key className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                Password & Security (पासवर्ड अपडेट)
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Update your login password for secure access
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {passwordSuccess && (
+          <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400 font-medium flex items-center gap-2 animate-fade-in">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span>Password updated successfully! Next login will require your new password.</span>
+          </div>
+        )}
+
+        {passwordError && (
+          <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-500 font-medium flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>{passwordError}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleUpdatePassword} className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+              Current Password (वर्तमान पासवर्ड)
+            </label>
+            <div className="relative">
+              <div className="absolute left-3.5 top-3 flex items-center pointer-events-none text-slate-400">
+                <Lock className="w-4 h-4" />
+              </div>
+              <input
+                type={showCurrentPassword ? 'text' : 'password'}
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                placeholder="Enter current password"
+                className="w-full min-h-[44px] h-11 rounded-xl pl-10 pr-10 text-xs bg-white/80 dark:bg-slate-900/80 border border-slate-300 dark:border-slate-800 text-slate-900 dark:text-white outline-none focus:border-amber-500"
+              />
+              <button
+                type="button"
+                onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                className="absolute right-3.5 top-3 text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                {showCurrentPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                New Password (नया पासवर्ड) *
+              </label>
+              <div className="relative">
+                <div className="absolute left-3.5 top-3 flex items-center pointer-events-none text-slate-400">
+                  <Lock className="w-4 h-4" />
+                </div>
+                <input
+                  type={showNewPassword ? 'text' : 'password'}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Min 6 characters"
+                  required
+                  className="w-full min-h-[44px] h-11 rounded-xl pl-10 pr-10 text-xs bg-white/80 dark:bg-slate-900/80 border border-slate-300 dark:border-slate-800 text-slate-900 dark:text-white outline-none focus:border-amber-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                  className="absolute right-3.5 top-3 text-slate-400 hover:text-slate-600 cursor-pointer"
+                >
+                  {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                Confirm New Password (पुष्टि करें) *
+              </label>
+              <div className="relative">
+                <div className="absolute left-3.5 top-3 flex items-center pointer-events-none text-slate-400">
+                  <Lock className="w-4 h-4" />
+                </div>
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Re-enter new password"
+                  required
+                  className="w-full min-h-[44px] h-11 rounded-xl pl-10 pr-10 text-xs bg-white/80 dark:bg-slate-900/80 border border-slate-300 dark:border-slate-800 text-slate-900 dark:text-white outline-none focus:border-amber-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3.5 top-3 text-slate-400 hover:text-slate-600 cursor-pointer"
+                >
+                  {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <Button
+            type="submit"
+            variant="secondary"
+            size="md"
+            loading={updatingPassword}
+            leftIcon={<Key className="w-4 h-4" />}
+            className="border-amber-500/40 text-amber-500 hover:bg-amber-500/10"
+          >
+            Update Password (पासवर्ड बदलें)
           </Button>
         </form>
       </GlassCard>

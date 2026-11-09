@@ -282,9 +282,9 @@ export const SuperAdminDashboard: React.FC = () => {
   const activeEmergenciesCount = emergencyIncidents.filter((e) => e.status === 'ACTIVE' || e.status === 'ESCALATED').length;
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] overflow-hidden bg-[#FFFFFF] -mx-4 sm:-mx-6 lg:-mx-8 -my-4 sm:-my-6">
+    <div className="flex h-screen w-full overflow-hidden bg-[#FFFFFF] text-gray-900 font-sans antialiased">
       {/* Desktop Left Sidebar */}
-      <div className="hidden lg:block h-full">
+      <div className="hidden lg:block h-full shrink-0">
         <SuperAdminSidebar
           currentTab={currentTab}
           onSelectTab={handleSelectTab}
@@ -349,7 +349,7 @@ export const SuperAdminDashboard: React.FC = () => {
 
         {/* Tab Body */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-[#FFFFFF] scrollbar-thin">
-          <div className="max-w-7xl mx-auto w-full">
+          <div className="w-full">
             {currentTab === 'dashboard' && (
               <OverviewSection
                 stats={stats}

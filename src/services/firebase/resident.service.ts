@@ -545,6 +545,8 @@ export const residentService = {
       numberOfVisitors?: number;
       companyName?: string;
       vehiclePlate?: string;
+      vehicleType?: 'None' | 'Bike' | 'Car' | 'Auto' | 'E-Rickshaw' | 'Other';
+      vehicleNumber?: string;
       instructions?: string;
       photoUrl?: string;
     }
@@ -574,7 +576,9 @@ export const residentService = {
       numberOfVisitors: data.numberOfVisitors || 1,
       status: 'PRE_APPROVED',
       companyName: data.companyName,
-      vehiclePlate: data.vehiclePlate,
+      vehiclePlate: data.vehiclePlate || data.vehicleNumber,
+      vehicleType: data.vehicleType || 'None',
+      vehicleNumber: data.vehicleNumber || data.vehiclePlate,
       instructions: data.instructions,
       photoUrl: data.photoUrl,
       createdAt: now,
@@ -607,7 +611,9 @@ export const residentService = {
       purpose: newPass.purpose,
       deliveryCompany: newPass.companyName,
       cabCompany: newPass.companyName as any,
-      cabVehiclePlate: newPass.vehiclePlate,
+      cabVehiclePlate: newPass.vehicleNumber || newPass.vehiclePlate,
+      vehicleType: newPass.vehicleType,
+      vehicleNumber: newPass.vehicleNumber || newPass.vehiclePlate,
       approvalHistory: [
         {
           timestamp: now,

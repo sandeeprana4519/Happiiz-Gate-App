@@ -4,6 +4,8 @@
  */
 
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import {
   LayoutDashboard,
   Building,
@@ -27,6 +29,8 @@ import {
   Settings,
   ChevronRight,
   Building2,
+  X,
+  LogOut,
 } from 'lucide-react';
 
 export type SocietyAdminTab =
@@ -58,6 +62,8 @@ interface SocietyAdminSidebarProps {
   activeEmergencyAlertsCount?: number;
   societyName: string;
   societyCode: string;
+  mobileOpen?: boolean;
+  onCloseMobile?: () => void;
 }
 
 export const SocietyAdminSidebar: React.FC<SocietyAdminSidebarProps> = ({
@@ -67,7 +73,18 @@ export const SocietyAdminSidebar: React.FC<SocietyAdminSidebarProps> = ({
   activeEmergencyAlertsCount = 0,
   societyName,
   societyCode,
+  mobileOpen = false,
+  onCloseMobile,
 }) => {
+  const { logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    onCloseMobile?.();
+    await logout();
+    navigate('/login');
+  };
+
   const navSections: {
     category: string;
     items: {
@@ -140,11 +157,11 @@ export const SocietyAdminSidebar: React.FC<SocietyAdminSidebarProps> = ({
     },
   ];
 
-  return (
-    <aside className="w-64 xl:w-72 shrink-0 bg-[#FFFFFF] border-r border-[#E6F1F5] flex flex-col h-full select-none">
+  const sidebarContent = (
+    <div className="flex flex-col h-full bg-[#FFFFFF] select-none w-full">
       {/* Society Admin Identity Badge */}
-      <div className="p-4 border-b border-[#E6F1F5] bg-[#F1F9FC]/60">
-        <div className="flex items-center gap-2.5">
+      <div className="p-4 border-b border-[#E6F1F5] bg-[#F1F9FC]/60 flex items-center justify-between">
+        <div className="flex items-center gap-2.5 min-w-0">
           <div className="w-9 h-9 rounded-xl bg-[#673AB7] text-white flex items-center justify-center font-black shadow-xs shrink-0">
             <Building2 className="w-5 h-5" />
           </div>
@@ -157,6 +174,16 @@ export const SocietyAdminSidebar: React.FC<SocietyAdminSidebarProps> = ({
             </div>
           </div>
         </div>
+        {onCloseMobile && (
+          <button
+            type="button"
+            onClick={onCloseMobile}
+            className="md:hidden p-1.5 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-[#E6F1F5] cursor-pointer"
+            aria-label="Close menu"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        )}
       </div>
 
       {/* Nav List */}
@@ -174,7 +201,10 @@ export const SocietyAdminSidebar: React.FC<SocietyAdminSidebarProps> = ({
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => onSelectTab(item.id)}
+                  onClick={() => {
+                    onSelectTab(item.id);
+                    onCloseMobile?.();
+                  }}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                     isActive
                       ? 'bg-[#673AB7] text-white shadow-xs'
@@ -209,11 +239,47 @@ export const SocietyAdminSidebar: React.FC<SocietyAdminSidebarProps> = ({
         ))}
       </div>
 
+      {/* Sign Out / Logout Option */}
+      <div className="p-3 border-t border-[#E6F1F5] bg-white">
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 transition-all cursor-pointer group"
+        >
+          <div className="flex items-center gap-2.5">
+            <LogOut className="w-4 h-4 text-red-500 group-hover:translate-x-0.5 transition-transform" />
+            <span>Sign Out (लॉगआउट)</span>
+          </div>
+        </button>
+      </div>
+
       {/* Footer Info */}
-      <div className="p-3 border-t border-[#E6F1F5] bg-[#F1F9FC]/40 text-[10px] text-[#A9B0B8] flex items-center justify-between font-mono">
+      <div className="p-2.5 border-t border-[#E6F1F5] bg-[#F1F9FC]/40 text-[10px] text-[#A9B0B8] flex items-center justify-between font-mono">
         <span>Gated Security Suite</span>
         <span className="text-emerald-600 font-semibold">Active Enclave</span>
       </div>
-    </aside>
+    </div>
+  );
+
+  return (
+    <>
+      {/* Desktop Sticky Sidebar */}
+      <aside className="hidden md:flex w-64 shrink-0 bg-[#FFFFFF] border-r border-[#E6F1F5] flex-col sticky top-0 h-screen select-none z-20">
+        {sidebarContent}
+      </aside>
+
+      {/* Mobile Slide-over Drawer */}
+      {mobileOpen && (
+        <div className="fixed inset-0 z-50 md:hidden flex">
+          <div
+            className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity"
+            onClick={onCloseMobile}
+          />
+          <aside className="relative flex flex-col w-72 max-w-[85vw] h-full shadow-2xl z-10 bg-white">
+            {sidebarContent}
+          </aside>
+        </div>
+      )}
+    </>
   );
 };

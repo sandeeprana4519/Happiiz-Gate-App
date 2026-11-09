@@ -3,6 +3,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+export interface EntityDocument {
+  id: string;
+  title: string;
+  name: string;
+  fileUrl: string;
+  fileType: string;
+  uploadedAt: string;
+  size?: number;
+}
+
 export interface Society {
   id: string;
   societyName: string;
@@ -15,12 +25,18 @@ export interface Society {
   country?: string;
   contactEmail?: string;
   contactPhone?: string;
+  totalTowers?: number;
   totalFlats: number;
   occupiedFlats: number;
   totalGates: number;
   activeGuards: number;
-  subscriptionPlan: 'Basic' | 'Enterprise' | 'Premium 3D';
-  status: 'ACTIVE' | 'PENDING_VERIFICATION' | 'SUSPENDED';
+  subscriptionPlan: 'Basic' | 'Enterprise' | 'Premium 3D' | string;
+  subscriptionType?: string;
+  subscriptionDuration?: string;
+  adminLoginEmail?: string;
+  adminPassword?: string;
+  documents?: EntityDocument[];
+  status: 'ACTIVE' | 'INACTIVE' | 'PENDING_VERIFICATION' | 'SUSPENDED';
   createdAt?: string;
 }
 

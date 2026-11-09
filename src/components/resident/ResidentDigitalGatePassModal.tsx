@@ -97,9 +97,10 @@ export const ResidentDigitalGatePassModal: React.FC<ResidentDigitalGatePassModal
               <p className="text-xs text-[#64748B] mt-0.5 truncate">
                 {pass.companyName || pass.purpose || 'Visitor Clearance'}
               </p>
-              {pass.vehiclePlate && (
-                <p className="text-[11px] font-mono text-[#673AB7] font-bold">
-                  Vehicle: {pass.vehiclePlate}
+              {(pass.vehiclePlate || pass.vehicleNumber || (pass.vehicleType && pass.vehicleType !== 'None')) && (
+                <p className="text-[11px] font-mono text-[#673AB7] font-bold mt-0.5">
+                  Vehicle: {pass.vehicleType && pass.vehicleType !== 'None' ? `${pass.vehicleType} ` : ''}
+                  {pass.vehiclePlate || pass.vehicleNumber ? `(${pass.vehiclePlate || pass.vehicleNumber})` : ''}
                 </p>
               )}
             </div>

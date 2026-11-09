@@ -39,6 +39,7 @@ import {
   ServiceHealthStatus,
 } from '../../types/admin';
 import { syncBus } from './sync.service';
+import { setUserStoredPassword } from './auth.service';
 import {
   MOCK_SOCIETIES,
   MOCK_USERS,
@@ -297,10 +298,77 @@ export async function updateSocietyStatus(
   return true;
 }
 
+export function syncAdminAccount(
+  entityId: string,
+  entityName: string,
+  entityCode: string,
+  loginEmail?: string,
+  password?: string,
+  contactPhone?: string
+): void {
+  if (!loginEmail) return;
+  const normalizedEmail = loginEmail.trim().toLowerCase();
+  try {
+    const rawAccounts = localStorage.getItem('happiiz_user_accounts');
+    const accounts: UserProfile[] = rawAccounts ? JSON.parse(rawAccounts) : [];
+
+    const existingIdx = accounts.findIndex(
+      (a) => a.email && a.email.toLowerCase() === normalizedEmail
+    );
+    const uid =
+      existingIdx >= 0
+        ? accounts[existingIdx].uid
+        : `usr_admin_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+
+    const adminProfile: UserProfile = {
+      uid,
+      fullName: `${entityName} Admin`,
+      displayName: `${entityName} Admin`,
+      email: normalizedEmail,
+      phoneNumber: contactPhone || '+91 98000 00000',
+      preferredLanguage: 'English',
+      accountStatus: 'ACTIVE',
+      createdAt: existingIdx >= 0 ? accounts[existingIdx].createdAt : new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      lastLoginAt: new Date().toISOString(),
+      onboardingCompleted: true,
+      primaryRole: 'SOCIETY_ADMIN',
+      role: 'SOCIETY_ADMIN',
+      societyId: entityId,
+      societyName: entityName,
+    };
+
+    if (existingIdx >= 0) {
+      accounts[existingIdx] = { ...accounts[existingIdx], ...adminProfile };
+    } else {
+      accounts.push(adminProfile);
+    }
+    localStorage.setItem('happiiz_user_accounts', JSON.stringify(accounts));
+
+    if (password) {
+      setUserStoredPassword(uid, password);
+    }
+  } catch (err) {
+    console.warn('[superadmin.service] Could not sync admin account:', err);
+  }
+}
+
 export async function updateSocietyDetails(societyId: string, data: Partial<Society>): Promise<boolean> {
   const list = await getAllSocieties();
   const updated = list.map((s) => (s.id === societyId ? { ...s, ...data } : s));
   setStoredArray('happiiz_sa_societies', updated);
+
+  const target = updated.find((s) => s.id === societyId);
+  if (target && (data.adminLoginEmail || data.adminPassword)) {
+    syncAdminAccount(
+      target.id,
+      target.societyName,
+      target.societyCode,
+      data.adminLoginEmail || target.adminLoginEmail,
+      data.adminPassword || target.adminPassword,
+      data.contactPhone || target.contactPhone
+    );
+  }
 
   if (db && auth?.currentUser && !auth.currentUser.uid.startsWith('dev_')) {
     try {
@@ -317,7 +385,31 @@ export async function updateSocietyDetails(societyId: string, data: Partial<Soci
     'UPDATE_SOCIETY_DETAILS',
     societyId,
     'SOCIETY',
-    'Updated community parameters and gate roster'
+    'Updated community parameters and credentials'
+  );
+
+  return true;
+}
+
+export async function deleteSociety(societyId: string): Promise<boolean> {
+  const list = await getAllSocieties();
+  const target = list.find((s) => s.id === societyId);
+  const updated = list.filter((s) => s.id !== societyId);
+  setStoredArray('happiiz_sa_societies', updated);
+
+  if (db && auth?.currentUser && !auth.currentUser.uid.startsWith('dev_')) {
+    try {
+      await deleteDoc(doc(db, SA_COLLECTIONS.SOCIETIES, societyId));
+    } catch (err) {
+      console.warn('[Societies] Remote delete notice:', err);
+    }
+  }
+
+  await recordAuditLog(
+    'DELETE_SOCIETY',
+    societyId,
+    'SOCIETY',
+    `Permanently removed society: ${target?.societyName || societyId}`
   );
 
   return true;
@@ -325,25 +417,46 @@ export async function updateSocietyDetails(societyId: string, data: Partial<Soci
 
 export async function createNewSociety(societyData: Partial<Society>): Promise<Society> {
   const list = await getAllSocieties();
+  const generatedCode = societyData.societyCode || `SOC-${String(list.length + 101).padStart(3, '0')}`;
   const newSoc: Society = {
-    id: `soc_${Date.now()}`,
+    id: societyData.id || `soc_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
     societyName: societyData.societyName || societyData.name || 'New Gated Community',
     name: societyData.societyName || societyData.name || 'New Gated Community',
-    societyCode: `SOC-${list.length + 10}`,
-    code: `SOC-${list.length + 10}`,
+    societyCode: generatedCode,
+    code: generatedCode,
     city: societyData.city || 'Bengaluru',
     state: societyData.state || 'Karnataka',
-    address: societyData.address || 'Tech Corridor',
-    totalFlats: Number(societyData.totalFlats) || 150,
-    occupiedFlats: Math.floor((Number(societyData.totalFlats) || 150) * 0.8),
+    address: societyData.address || '',
+    totalTowers: Number(societyData.totalTowers) || 1,
+    totalFlats: Number(societyData.totalFlats) || 100,
+    occupiedFlats: Math.floor((Number(societyData.totalFlats) || 100) * 0.8),
     totalGates: Number(societyData.totalGates) || 2,
     activeGuards: 4,
-    subscriptionPlan: societyData.subscriptionPlan || 'Enterprise',
-    status: 'ACTIVE',
+    subscriptionPlan: societyData.subscriptionPlan || societyData.subscriptionType || 'Enterprise',
+    subscriptionType: societyData.subscriptionType || societyData.subscriptionPlan || 'Enterprise',
+    subscriptionDuration: societyData.subscriptionDuration || '1 Year',
+    contactEmail: societyData.contactEmail || '',
+    contactPhone: societyData.contactPhone || '',
+    adminLoginEmail: societyData.adminLoginEmail || '',
+    adminPassword: societyData.adminPassword || '',
+    documents: societyData.documents || [],
+    status: societyData.status || 'ACTIVE',
     createdAt: new Date().toISOString(),
   };
 
   setStoredArray('happiiz_sa_societies', [newSoc, ...list]);
+
+  // Bind Society Admin user account
+  if (newSoc.adminLoginEmail) {
+    syncAdminAccount(
+      newSoc.id,
+      newSoc.societyName,
+      newSoc.societyCode,
+      newSoc.adminLoginEmail,
+      newSoc.adminPassword,
+      newSoc.contactPhone
+    );
+  }
 
   if (db && auth?.currentUser && !auth.currentUser.uid.startsWith('dev_')) {
     try {
@@ -357,7 +470,7 @@ export async function createNewSociety(societyData: Partial<Society>): Promise<S
     'PROVISION_NEW_SOCIETY',
     newSoc.id,
     'SOCIETY',
-    `Provisioned ${newSoc.societyName} on SaaS cloud`
+    `Provisioned ${newSoc.societyName} (${newSoc.societyCode}) on SaaS cloud`
   );
 
   return newSoc;
@@ -1038,9 +1151,12 @@ export async function getManagedCompanies(): Promise<ManagedCompany[]> {
 
 export async function createManagedCompany(data: Partial<ManagedCompany>): Promise<ManagedCompany> {
   const current = await getManagedCompanies();
+  const generatedCode = data.companyCode || `CMP-${String(current.length + 101).padStart(3, '0')}`;
   const newCmp: ManagedCompany = {
-    id: `cmp_${Date.now()}`,
+    id: data.id || `cmp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
     companyName: data.companyName || 'New Commercial Enterprise',
+    companyCode: generatedCode,
+    registrationNumber: data.registrationNumber || `CIN-U${Math.floor(10000 + Math.random() * 90000)}`,
     companyType: data.companyType || 'Commercial Building',
     address: data.address || '',
     city: data.city || 'Bengaluru',
@@ -1049,16 +1165,75 @@ export async function createManagedCompany(data: Partial<ManagedCompany>): Promi
     contactEmail: data.contactEmail || '',
     contactPhone: data.contactPhone || '',
     adminName: data.adminName || 'Admin Assigned',
+    adminLoginEmail: data.adminLoginEmail || '',
+    adminPassword: data.adminPassword || '',
     totalBuildings: Number(data.totalBuildings) || 1,
     totalOffices: Number(data.totalOffices) || 10,
+    totalGates: Number(data.totalGates) || 2,
     status: data.status || 'ACTIVE',
-    subscriptionPlan: data.subscriptionPlan || 'Enterprise Plan',
+    subscriptionPlan: data.subscriptionPlan || data.subscriptionType || 'Enterprise Plan',
+    subscriptionType: data.subscriptionType || data.subscriptionPlan || 'Enterprise Plan',
+    subscriptionDuration: data.subscriptionDuration || '1 Year',
+    documents: data.documents || [],
     registeredAt: new Date().toISOString(),
   };
 
   setStoredArray('happiiz_sa_companies', [newCmp, ...current]);
-  await recordAuditLog('CREATE_COMPANY', newCmp.id, 'SOCIETY', `Registered new company: ${newCmp.companyName}`);
+
+  // Bind Company Admin user credentials
+  if (newCmp.adminLoginEmail) {
+    syncAdminAccount(
+      newCmp.id,
+      newCmp.companyName,
+      newCmp.companyCode || 'CMP',
+      newCmp.adminLoginEmail,
+      newCmp.adminPassword,
+      newCmp.contactPhone
+    );
+  }
+
+  await recordAuditLog('CREATE_COMPANY', newCmp.id, 'SOCIETY', `Registered new company: ${newCmp.companyName} (${newCmp.companyCode})`);
   return newCmp;
+}
+
+export async function updateManagedCompany(
+  companyId: string,
+  data: Partial<ManagedCompany>
+): Promise<boolean> {
+  const list = await getManagedCompanies();
+  const updated = list.map((c) => (c.id === companyId ? { ...c, ...data } : c));
+  setStoredArray('happiiz_sa_companies', updated);
+
+  const target = updated.find((c) => c.id === companyId);
+  if (target && (data.adminLoginEmail || data.adminPassword)) {
+    syncAdminAccount(
+      target.id,
+      target.companyName,
+      target.companyCode || 'CMP',
+      data.adminLoginEmail || target.adminLoginEmail,
+      data.adminPassword || target.adminPassword,
+      data.contactPhone || target.contactPhone
+    );
+  }
+
+  await recordAuditLog('UPDATE_COMPANY_DETAILS', companyId, 'SOCIETY', `Updated details for company: ${data.companyName || companyId}`);
+  return true;
+}
+
+export async function deleteManagedCompany(companyId: string): Promise<boolean> {
+  const list = await getManagedCompanies();
+  const target = list.find((c) => c.id === companyId);
+  const updated = list.filter((c) => c.id !== companyId);
+  setStoredArray('happiiz_sa_companies', updated);
+
+  await recordAuditLog(
+    'DELETE_COMPANY',
+    companyId,
+    'SOCIETY',
+    `Permanently removed company: ${target?.companyName || companyId}`
+  );
+
+  return true;
 }
 
 export async function updateCompanyStatus(

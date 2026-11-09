@@ -195,20 +195,25 @@ export const ServicePartnerDashboard: React.FC = () => {
   });
 
   return (
-    <div className="min-h-screen bg-[#FFFFFF] text-[#111111] pb-24 select-none relative font-sans antialiased">
-      {/* 1. HEADER (Profile, Online/Offline Toggle, Sign Out) */}
+    <div className="w-full max-w-full select-none relative font-sans antialiased min-h-screen pb-24 overflow-x-hidden bg-[#FFFFFF] text-[#111111] no-scrollbar">
+      {/* 1. MOBILE BLACK HEADER (Brand, Online Toggle, Three Dots Menu & Profile Card) */}
       <PartnerHeader
         profile={profile}
         onToggleOnline={handleToggleOnline}
         onLogout={handleLogout}
+        onOpenTeam={() => setOpenTeamModal(true)}
+        onOpenServices={() => setOpenServicesModal(true)}
+        onOpenKyc={() => setOpenKycModal(true)}
+        onOpenSupport={() => setOpenSupportModal(true)}
+        newRequestsCount={newRequests.length}
       />
 
-      <main className="max-w-lg mx-auto px-4 sm:px-6 pt-5 space-y-6">
+      <main className="w-full max-w-lg mx-auto min-w-0 px-3 sm:px-4 pt-3 pb-6 space-y-4">
         {/* ======================================================== */}
         {/* TAB 1: HOME DASHBOARD */}
         {/* ======================================================== */}
         {activeTab === 'home' && (
-          <div className="space-y-6 animate-fade-in">
+          <div className="space-y-4 animate-fade-in">
             {/* NEW BOOKING REQUESTS ALERT BANNER */}
             {newRequests.length > 0 && (
               <div
@@ -216,21 +221,21 @@ export const ServicePartnerDashboard: React.FC = () => {
                   setBookingFilter('REQUESTED');
                   setActiveTab('bookings');
                 }}
-                className="p-4 rounded-3xl bg-amber-500 text-white shadow-lg flex items-center justify-between cursor-pointer animate-pulse"
+                className="p-3.5 rounded-2xl bg-amber-500 text-white shadow-md flex items-center justify-between cursor-pointer animate-pulse active:scale-98 transition"
               >
-                <div className="flex items-center gap-3">
-                  <span className="w-3 h-3 rounded-full bg-white animate-ping" />
-                  <div>
-                    <h3 className="font-black text-sm">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className="w-2.5 h-2.5 rounded-full bg-white animate-ping shrink-0" />
+                  <div className="min-w-0">
+                    <h3 className="font-black text-xs sm:text-sm truncate">
                       {newRequests.length} New Service Request{newRequests.length > 1 ? 's' : ''}!
                     </h3>
-                    <p className="text-xs text-amber-100">
+                    <p className="text-[11px] text-amber-100 truncate">
                       Tap to review customer problem & accept
                     </p>
                   </div>
                 </div>
-                <span className="px-3 py-1.5 rounded-xl bg-white text-amber-950 font-black text-xs shadow-sm">
-                  View Now
+                <span className="px-3 py-1 rounded-xl bg-white text-amber-950 font-black text-xs shrink-0 shadow-xs">
+                  View
                 </span>
               </div>
             )}
@@ -240,16 +245,16 @@ export const ServicePartnerDashboard: React.FC = () => {
               <h2 className="text-xs font-bold text-[#A9B0B8] uppercase tracking-wider">
                 Operations & Workload Overview
               </h2>
-              <div className="grid grid-cols-4 gap-2 text-center text-xs">
+              <div className="grid grid-cols-4 gap-1.5 sm:gap-2 text-center text-xs">
                 <div
                   onClick={() => {
                     setBookingFilter('REQUESTED');
                     setActiveTab('bookings');
                   }}
-                  className="p-3 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] cursor-pointer hover:border-[#673AB7] transition-all"
+                  className="py-2.5 px-1 sm:px-2 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] cursor-pointer hover:border-[#673AB7] transition-all min-w-0 flex flex-col items-center justify-center shadow-2xs active:scale-95"
                 >
-                  <p className="text-lg font-black text-amber-600">{newRequests.length}</p>
-                  <p className="text-[10px] font-bold text-[#64748B] mt-0.5">Requests</p>
+                  <p className="text-base sm:text-lg font-black text-amber-600 leading-tight">{newRequests.length}</p>
+                  <p className="text-[10px] font-bold text-[#64748B] mt-1 truncate w-full">Requests</p>
                 </div>
 
                 <div
@@ -257,10 +262,10 @@ export const ServicePartnerDashboard: React.FC = () => {
                     setBookingFilter('ACCEPTED');
                     setActiveTab('bookings');
                   }}
-                  className="p-3 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] cursor-pointer hover:border-[#673AB7] transition-all"
+                  className="py-2.5 px-1 sm:px-2 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] cursor-pointer hover:border-[#673AB7] transition-all min-w-0 flex flex-col items-center justify-center shadow-2xs active:scale-95"
                 >
-                  <p className="text-lg font-black text-[#673AB7]">{acceptedBookings.length}</p>
-                  <p className="text-[10px] font-bold text-[#64748B] mt-0.5">Accepted</p>
+                  <p className="text-base sm:text-lg font-black text-[#673AB7] leading-tight">{acceptedBookings.length}</p>
+                  <p className="text-[10px] font-bold text-[#64748B] mt-1 truncate w-full">Accepted</p>
                 </div>
 
                 <div
@@ -268,84 +273,89 @@ export const ServicePartnerDashboard: React.FC = () => {
                     setBookingFilter('IN_PROGRESS');
                     setActiveTab('bookings');
                   }}
-                  className="p-3 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] cursor-pointer hover:border-[#673AB7] transition-all"
+                  className="py-2.5 px-1 sm:px-2 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] cursor-pointer hover:border-[#673AB7] transition-all min-w-0 flex flex-col items-center justify-center shadow-2xs active:scale-95"
                 >
-                  <p className="text-lg font-black text-blue-600">{inProgressJobs.length}</p>
-                  <p className="text-[10px] font-bold text-[#64748B] mt-0.5">In Progress</p>
+                  <p className="text-base sm:text-lg font-black text-blue-600 leading-tight">{inProgressJobs.length}</p>
+                  <p className="text-[10px] font-bold text-[#64748B] mt-1 truncate w-full">In Progress</p>
                 </div>
 
                 <div
                   onClick={() => setActiveTab('earnings')}
-                  className="p-3 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] cursor-pointer hover:border-[#673AB7] transition-all"
+                  className="py-2.5 px-1 sm:px-2 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] cursor-pointer hover:border-[#673AB7] transition-all min-w-0 flex flex-col items-center justify-center shadow-2xs active:scale-95"
                 >
-                  <p className="text-lg font-black text-emerald-700">₹{profile.totalEarnings.toLocaleString()}</p>
-                  <p className="text-[10px] font-bold text-[#64748B] mt-0.5">Earnings</p>
+                  <p
+                    className="text-[11.5px] sm:text-sm font-black text-emerald-700 leading-tight truncate w-full tracking-tight"
+                    title={`₹${profile.totalEarnings.toLocaleString()}`}
+                  >
+                    ₹{profile.totalEarnings >= 100000 ? `${(profile.totalEarnings / 1000).toFixed(1)}k` : profile.totalEarnings.toLocaleString()}
+                  </p>
+                  <p className="text-[10px] font-bold text-[#64748B] mt-1 truncate w-full">Earnings</p>
                 </div>
               </div>
             </section>
 
             {/* QUICK ACTIONS GRID */}
             <section className="space-y-2">
-              <h2 className="text-xs font-bold text-[#A9B0B8] uppercase tracking-wider">
+              <h2 className="text-xs font-bold text-[#64748B] uppercase tracking-wider px-0.5">
                 Quick Actions
               </h2>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2.5">
                 <button
                   type="button"
                   onClick={() => {
                     setBookingFilter('REQUESTED');
                     setActiveTab('bookings');
                   }}
-                  className="p-4 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] text-left hover:border-[#673AB7] transition-all cursor-pointer flex items-center gap-3"
+                  className="p-3 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] text-left hover:border-[#673AB7] transition-all cursor-pointer flex items-center gap-2.5 active:scale-95 shadow-2xs"
                 >
-                  <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
-                    <Briefcase className="w-5 h-5" />
+                  <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                    <Briefcase className="w-4 h-4" />
                   </div>
-                  <div>
-                    <h4 className="font-extrabold text-xs text-[#111111]">Booking Requests</h4>
-                    <p className="text-[10px] text-[#A9B0B8]">{newRequests.length} waiting</p>
+                  <div className="min-w-0">
+                    <h4 className="font-extrabold text-xs text-[#111111] truncate">Bookings</h4>
+                    <p className="text-[10px] text-[#64748B] truncate">{newRequests.length} waiting</p>
                   </div>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setOpenTeamModal(true)}
-                  className="p-4 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] text-left hover:border-[#673AB7] transition-all cursor-pointer flex items-center gap-3"
+                  className="p-3 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] text-left hover:border-[#673AB7] transition-all cursor-pointer flex items-center gap-2.5 active:scale-95 shadow-2xs"
                 >
-                  <div className="w-10 h-10 rounded-2xl bg-purple-100 text-[#673AB7] flex items-center justify-center shrink-0">
-                    <Users className="w-5 h-5" />
+                  <div className="w-9 h-9 rounded-xl bg-purple-100 text-[#673AB7] flex items-center justify-center shrink-0">
+                    <Users className="w-4 h-4" />
                   </div>
-                  <div>
-                    <h4 className="font-extrabold text-xs text-[#111111]">Technicians Team</h4>
-                    <p className="text-[10px] text-[#A9B0B8]">{technicians.length} field staff</p>
+                  <div className="min-w-0">
+                    <h4 className="font-extrabold text-xs text-[#111111] truncate">Team Staff</h4>
+                    <p className="text-[10px] text-[#64748B] truncate">{technicians.length} field staff</p>
                   </div>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setOpenServicesModal(true)}
-                  className="p-4 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] text-left hover:border-[#673AB7] transition-all cursor-pointer flex items-center gap-3"
+                  className="p-3 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] text-left hover:border-[#673AB7] transition-all cursor-pointer flex items-center gap-2.5 active:scale-95 shadow-2xs"
                 >
-                  <div className="w-10 h-10 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
-                    <Wrench className="w-5 h-5" />
+                  <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
+                    <Wrench className="w-4 h-4" />
                   </div>
-                  <div>
-                    <h4 className="font-extrabold text-xs text-[#111111]">Services & Rates</h4>
-                    <p className="text-[10px] text-[#A9B0B8]">{services.length} categories</p>
+                  <div className="min-w-0">
+                    <h4 className="font-extrabold text-xs text-[#111111] truncate">Services & Rates</h4>
+                    <p className="text-[10px] text-[#64748B] truncate">{services.length} categories</p>
                   </div>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setOpenEarningsModal(true)}
-                  className="p-4 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] text-left hover:border-[#673AB7] transition-all cursor-pointer flex items-center gap-3"
+                  className="p-3 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] text-left hover:border-[#673AB7] transition-all cursor-pointer flex items-center gap-2.5 active:scale-95 shadow-2xs"
                 >
-                  <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                    <Wallet className="w-5 h-5" />
+                  <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                    <Wallet className="w-4 h-4" />
                   </div>
-                  <div>
-                    <h4 className="font-extrabold text-xs text-[#111111]">Wallet & Payouts</h4>
-                    <p className="text-[10px] text-[#A9B0B8]">₹{profile.walletBalance} balance</p>
+                  <div className="min-w-0">
+                    <h4 className="font-extrabold text-xs text-[#111111] truncate">Wallet & Payout</h4>
+                    <p className="text-[10px] text-[#64748B] truncate">₹{profile.walletBalance} balance</p>
                   </div>
                 </button>
               </div>
@@ -353,44 +363,44 @@ export const ServicePartnerDashboard: React.FC = () => {
 
             {/* RECENT WORK ORDERS STREAM */}
             <section className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-bold text-[#A9B0B8] uppercase tracking-wider">
-                  Recent Society Service Orders
+              <div className="flex items-center justify-between px-0.5">
+                <h3 className="text-xs font-bold text-[#64748B] uppercase tracking-wider">
+                  Recent Society Work Orders
                 </h3>
                 <span
                   onClick={() => setActiveTab('bookings')}
                   className="text-[11px] font-bold text-[#673AB7] hover:underline cursor-pointer"
                 >
-                  View All
+                  View All ({bookings.length})
                 </span>
               </div>
 
-              <div className="space-y-2.5">
+              <div className="space-y-2">
                 {bookings.slice(0, 3).map((b) => (
                   <div
                     key={b.id}
                     onClick={() => setSelectedBooking(b)}
-                    className="p-4 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] flex items-center justify-between hover:border-[#673AB7] transition-all cursor-pointer"
+                    className="p-3 sm:p-3.5 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] flex items-center justify-between hover:border-[#673AB7] transition-all cursor-pointer active:scale-98"
                   >
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <h4 className="font-black text-sm text-[#111111]">{b.residentName}</h4>
-                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-white text-[#673AB7] border border-[#E6F1F5]">
+                    <div className="space-y-0.5 min-w-0 flex-1 pr-2">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <h4 className="font-extrabold text-xs sm:text-sm text-[#111111] truncate">{b.residentName}</h4>
+                        <span className="text-[9px] uppercase font-bold px-1.5 py-0.2 rounded-md bg-white text-[#673AB7] border border-[#E6F1F5] shrink-0">
                           {b.category}
                         </span>
                       </div>
-                      <p className="text-xs text-[#64748B]">
+                      <p className="text-[11px] text-[#64748B] truncate">
                         Flat <strong className="text-[#111111]">{b.flatNumber}</strong> · {b.societyName}
                       </p>
-                      <p className="text-[11px] text-[#A9B0B8] flex items-center gap-1 font-mono">
-                        <Clock className="w-3.5 h-3.5" />
+                      <p className="text-[10px] text-[#A9B0B8] flex items-center gap-1 font-mono">
+                        <Clock className="w-3 h-3 text-amber-500 shrink-0" />
                         <span>{b.scheduledTime}</span>
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 shrink-0">
                       <span
-                        className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                        className={`px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-wider ${
                           b.status === 'COMPLETED'
                             ? 'bg-emerald-100 text-emerald-800'
                             : b.status === 'IN_PROGRESS'
@@ -416,12 +426,12 @@ export const ServicePartnerDashboard: React.FC = () => {
         {/* ======================================================== */}
         {activeTab === 'bookings' && (
           <div className="space-y-4 animate-fade-in">
-            <div>
-              <h2 className="text-xl sm:text-2xl font-black text-[#111111] tracking-tight">
+            <div className="px-0.5">
+              <h2 className="text-base sm:text-lg font-black text-[#111111] tracking-tight">
                 Work Orders & Bookings
               </h2>
-              <p className="text-xs sm:text-sm text-[#A9B0B8] mt-0.5">
-                Service visits for Emerald Heights residents
+              <p className="text-[11px] sm:text-xs text-[#64748B] mt-0.5">
+                Service visits for Emerald Heights residents (सोसायटी सेवा कार्य)
               </p>
             </div>
 
@@ -438,12 +448,13 @@ export const ServicePartnerDashboard: React.FC = () => {
             </div>
 
             {/* Filter Pills */}
-            <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1">
+            <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar pb-1 -mx-0.5 px-0.5">
               {(['ALL', 'REQUESTED', 'ACCEPTED', 'IN_PROGRESS', 'COMPLETED'] as const).map((f) => (
                 <button
                   key={f}
+                  type="button"
                   onClick={() => setBookingFilter(f)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                  className={`px-2 sm:px-3 py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all whitespace-nowrap shrink-0 cursor-pointer active:scale-95 ${
                     bookingFilter === f
                       ? 'bg-[#673AB7] text-white shadow-xs'
                       : 'bg-[#F1F9FC] text-[#64748B] hover:bg-[#E6F1F5]'
@@ -463,7 +474,7 @@ export const ServicePartnerDashboard: React.FC = () => {
             </div>
 
             {/* Bookings Stream */}
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               {filteredBookings.length === 0 ? (
                 <div className="p-8 text-center rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] text-xs text-[#A9B0B8]">
                   No bookings found under this filter.
@@ -473,23 +484,23 @@ export const ServicePartnerDashboard: React.FC = () => {
                   <div
                     key={b.id}
                     onClick={() => setSelectedBooking(b)}
-                    className="p-4 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] space-y-2.5 hover:border-[#673AB7] transition-all cursor-pointer"
+                    className="p-3.5 sm:p-4 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] space-y-2 hover:border-[#673AB7] transition-all cursor-pointer active:scale-98"
                   >
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-xs font-bold text-[#673AB7]">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono text-xs font-black text-[#673AB7]">
                             #{b.bookingCode}
                           </span>
-                          <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-white text-[#673AB7] border border-[#E6F1F5]">
+                          <span className="text-[9px] uppercase font-bold px-1.5 py-0.2 rounded-md bg-white text-[#673AB7] border border-[#E6F1F5]">
                             {b.category}
                           </span>
                         </div>
-                        <h4 className="font-black text-sm text-[#111111] mt-1">{b.residentName}</h4>
+                        <h4 className="font-extrabold text-xs sm:text-sm text-[#111111] mt-0.5 truncate">{b.residentName}</h4>
                       </div>
 
                       <span
-                        className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
+                        className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full shrink-0 ${
                           b.status === 'COMPLETED'
                             ? 'bg-emerald-100 text-emerald-800'
                             : b.status === 'IN_PROGRESS'
@@ -503,13 +514,13 @@ export const ServicePartnerDashboard: React.FC = () => {
                       </span>
                     </div>
 
-                    <p className="text-xs text-[#64748B] line-clamp-2">{b.problemDescription}</p>
+                    <p className="text-[11px] text-[#64748B] line-clamp-2">{b.problemDescription}</p>
 
-                    <div className="flex items-center justify-between text-[11px] text-[#A9B0B8] pt-2 border-t border-[#E6F1F5]">
-                      <span>
+                    <div className="flex items-center justify-between text-[11px] text-[#64748B] pt-2 border-t border-[#E6F1F5]">
+                      <span className="truncate">
                         Flat <strong className="text-[#111111]">{b.flatNumber}</strong> · {b.scheduledTime}
                       </span>
-                      <span className="font-bold text-emerald-700">
+                      <span className="font-black text-emerald-700 shrink-0">
                         ₹{b.finalCost || b.estimatedCost}
                       </span>
                     </div>
@@ -525,42 +536,42 @@ export const ServicePartnerDashboard: React.FC = () => {
         {/* ======================================================== */}
         {activeTab === 'calendar' && (
           <div className="space-y-4 animate-fade-in">
-            <div>
-              <h2 className="text-xl sm:text-2xl font-black text-[#111111] tracking-tight">
+            <div className="px-0.5">
+              <h2 className="text-base sm:text-lg font-black text-[#111111] tracking-tight">
                 Job Schedule & Calendar
               </h2>
-              <p className="text-xs sm:text-sm text-[#A9B0B8] mt-0.5">
+              <p className="text-[11px] sm:text-xs text-[#64748B] mt-0.5">
                 Upcoming confirmed visits for your field staff
               </p>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               {bookings
                 .filter((b) => b.status === 'ACCEPTED' || b.status === 'IN_PROGRESS')
                 .map((b) => (
                   <div
                     key={b.id}
                     onClick={() => setSelectedBooking(b)}
-                    className="p-4 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] flex items-center justify-between hover:border-[#673AB7] cursor-pointer"
+                    className="p-3.5 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] flex items-center justify-between hover:border-[#673AB7] cursor-pointer active:scale-98 transition"
                   >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-extrabold text-sm text-[#111111]">{b.scheduledTime}</span>
-                        <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-white text-[#673AB7]">
+                    <div className="min-w-0 flex-1 pr-2">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-bold text-xs sm:text-sm text-[#111111]">{b.scheduledTime}</span>
+                        <span className="text-[9px] uppercase font-bold px-1.5 py-0.2 rounded-md bg-white text-[#673AB7] border border-[#E6F1F5]">
                           {b.category}
                         </span>
                       </div>
-                      <p className="text-xs text-[#64748B] mt-0.5">
+                      <p className="text-[11px] text-[#64748B] mt-0.5 truncate">
                         {b.residentName} · Flat <strong className="text-[#111111]">{b.flatNumber}</strong>
                       </p>
                       {b.assignedTechnicianName && (
-                        <p className="text-[11px] font-bold text-[#673AB7] mt-0.5">
+                        <p className="text-[10px] font-bold text-[#673AB7] mt-0.5 truncate">
                           Assigned: {b.assignedTechnicianName}
                         </p>
                       )}
                     </div>
 
-                    <button className="px-3 py-1.5 rounded-xl bg-[#673AB7] text-white text-xs font-bold hover:bg-[#512DA8]">
+                    <button className="px-3 py-1.5 rounded-xl bg-[#673AB7] text-white text-xs font-bold hover:bg-[#512DA8] shrink-0">
                       View Job
                     </button>
                   </div>
@@ -574,34 +585,34 @@ export const ServicePartnerDashboard: React.FC = () => {
         {/* ======================================================== */}
         {activeTab === 'earnings' && (
           <div className="space-y-4 animate-fade-in">
-            <div>
-              <h2 className="text-xl sm:text-2xl font-black text-[#111111] tracking-tight">
+            <div className="px-0.5">
+              <h2 className="text-base sm:text-lg font-black text-[#111111] tracking-tight">
                 Earnings & Financial Ledger
               </h2>
-              <p className="text-xs sm:text-sm text-[#A9B0B8] mt-0.5">
-                Net earnings after 10% platform commission
+              <p className="text-[11px] sm:text-xs text-[#64748B] mt-0.5">
+                Net earnings after 10% platform commission (कुल कमाई व वॉलेट)
               </p>
             </div>
 
             {/* Big Wallet Card */}
-            <div className="p-5 rounded-3xl bg-gradient-to-r from-[#673AB7] to-[#512DA8] text-white flex items-center justify-between shadow-lg">
+            <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-[#673AB7] to-[#512DA8] text-white flex items-center justify-between shadow-lg">
               <div>
-                <p className="text-xs text-purple-200 uppercase font-semibold">Available Wallet Payout</p>
-                <p className="text-3xl font-black mt-1">₹{profile.walletBalance.toLocaleString()}</p>
-                <p className="text-[11px] text-purple-200 mt-1">
+                <p className="text-[11px] text-purple-200 uppercase font-semibold">Available Wallet Payout</p>
+                <p className="text-2xl sm:text-3xl font-black mt-0.5">₹{profile.walletBalance.toLocaleString()}</p>
+                <p className="text-[10px] text-purple-200 mt-1">
                   Settles automatically to registered bank account
                 </p>
               </div>
               <button
                 onClick={() => alert('Withdrawal request queued! Funds will be deposited within 24 hours.')}
-                className="px-4 py-2.5 rounded-2xl bg-white text-[#673AB7] font-black text-xs shadow-md hover:bg-purple-50 transition-colors cursor-pointer"
+                className="px-3.5 py-2 rounded-xl bg-white text-[#673AB7] font-black text-xs shadow-md hover:bg-purple-50 transition-colors cursor-pointer shrink-0"
               >
                 Withdraw
               </button>
             </div>
 
             {/* Payout Breakdown */}
-            <div className="p-4 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] space-y-2 text-xs">
+            <div className="p-3.5 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] space-y-2 text-xs">
               <div className="flex justify-between">
                 <span className="text-[#64748B]">Total Completed Jobs:</span>
                 <span className="font-bold text-[#111111]">{profile.totalCompletedJobs} jobs</span>
@@ -614,11 +625,11 @@ export const ServicePartnerDashboard: React.FC = () => {
 
             {/* Transactions Ledger */}
             <div className="space-y-2">
-              <h4 className="font-bold text-xs text-[#111111]">Settled Invoices</h4>
+              <h4 className="font-bold text-xs text-[#111111] px-0.5">Settled Invoices</h4>
               {earnings.map((e) => (
                 <div
                   key={e.id}
-                  className="p-3.5 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] flex items-center justify-between"
+                  className="p-3 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] flex items-center justify-between"
                 >
                   <div>
                     <p className="font-bold text-xs text-[#111111]">{e.residentName}</p>
@@ -639,26 +650,26 @@ export const ServicePartnerDashboard: React.FC = () => {
         {/* ======================================================== */}
         {activeTab === 'profile' && (
           <div className="space-y-4 animate-fade-in">
-            <div>
-              <h2 className="text-xl sm:text-2xl font-black text-[#111111] tracking-tight">
+            <div className="px-0.5">
+              <h2 className="text-base sm:text-lg font-black text-[#111111] tracking-tight">
                 Partner Profile & Settings
               </h2>
-              <p className="text-xs sm:text-sm text-[#A9B0B8] mt-0.5">
+              <p className="text-[11px] sm:text-xs text-[#64748B] mt-0.5">
                 Business details, KYC compliance, and team management
               </p>
             </div>
 
             {/* Profile Summary Card */}
-            <div className="p-4 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] flex items-center gap-3">
+            <div className="p-3.5 sm:p-4 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] flex items-center gap-3">
               <img
                 src={profile.photoUrl}
                 alt={profile.businessName}
-                className="w-16 h-16 rounded-2xl object-cover"
+                className="w-14 h-14 rounded-2xl object-cover shrink-0"
               />
-              <div>
-                <h3 className="font-black text-sm text-[#111111]">{profile.businessName}</h3>
-                <p className="text-xs text-[#64748B]">{profile.contactPersonName} · {profile.phoneNumber}</p>
-                <div className="flex items-center gap-1.5 mt-1">
+              <div className="min-w-0 flex-1">
+                <h3 className="font-black text-sm text-[#111111] truncate">{profile.businessName}</h3>
+                <p className="text-xs text-[#64748B] truncate">{profile.contactPersonName} · {profile.phoneNumber}</p>
+                <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                   <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px]">
                     Verified Vendor
                   </span>
