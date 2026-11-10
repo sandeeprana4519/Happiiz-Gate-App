@@ -5,6 +5,7 @@
 
 import { UserRole, MembershipStatus } from './auth';
 import { EntityDocument } from './society';
+export type { EntityDocument } from './society';
 
 export interface SubscriptionPlan {
   id: string;
@@ -18,6 +19,7 @@ export interface SubscriptionPlan {
   features: string[];
   trialDays: number;
   status: 'ACTIVE' | 'INACTIVE';
+  description?: string;
   createdAt: string;
   updatedAt?: string;
 }
@@ -41,12 +43,14 @@ export interface SocietySubscription {
 export interface FinancialTransaction {
   id: string;
   transactionNumber: string;
+  invoiceId?: string;
   referenceId?: string; // Society ID or Partner ID
   entityName: string;
   type: 'SUBSCRIPTION' | 'PARTNER_COMMISSION' | 'REFUND' | 'SETUP_FEE';
   amount: number;
   currency: string;
   paymentMethod: 'UPI' | 'Card' | 'NetBanking' | 'Bank Transfer';
+  billingCycle?: 'Monthly' | 'Quarterly' | 'Half-Yearly' | 'Yearly';
   status: 'SUCCESS' | 'FAILED' | 'PENDING' | 'REFUNDED';
   paymentDate: string;
   gatewayReference: string;

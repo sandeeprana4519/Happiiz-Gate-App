@@ -9,8 +9,13 @@ import {
   Pin, 
   Check, 
   X, 
-  CheckCircle 
+  CheckCircle,
+  Wrench,
+  ShieldCheck,
+  Clock,
+  AlertTriangle,
 } from 'lucide-react';
+import { PartnerOnboardingModal } from '../partner/PartnerOnboardingModal';
 import { 
   SocietyNotice, 
   SocietyComplaint, 
@@ -916,70 +921,167 @@ export const SocietyCommunityView: React.FC<CommunityViewProps> = ({
 // -------------------------------------------------------------
 // MODULE 17: SERVICE PARTNER MANAGEMENT
 // -------------------------------------------------------------
-interface ServicePartnerItem {
+export interface ServicePartnerItem {
   id: string;
   companyName: string;
   category: string;
   contactPerson: string;
   phoneNumber: string;
   isVerified?: boolean;
+  status?: string;
+  onboardedBy?: string;
 }
 
 interface ServicePartnersViewProps {
   society: Society;
   partners: ServicePartnerItem[];
   onToggleSocietyAccess: (partnerId: string) => Promise<void>;
+  onRefresh?: () => Promise<void> | void;
 }
 
 export const SocietyServicePartnersView: React.FC<ServicePartnersViewProps> = ({
   society,
   partners,
-  onToggleSocietyAccess
+  onToggleSocietyAccess,
+  onRefresh,
 }) => {
+  const [showAddPartnerModal, setShowAddPartnerModal] = useState(false);
+  const [submissionSuccessNotice, setSubmissionSuccessNotice] = useState(false);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-gray-900">Verified Service Partners</h2>
-          <p className="text-sm text-gray-500">Control trusted vendor gate permissions for water deliveries, internet fiber, groceries and maintenance</p>
+          <p className="text-sm text-gray-500">
+            Control trusted vendor gate permissions for water deliveries, internet fiber, groceries and maintenance
+          </p>
+        </div>
+
+        {/* 1B. ADD SERVICE PARTNER ACTION FOR SOCIETY ADMIN */}
+        <button
+          type="button"
+          onClick={() => setShowAddPartnerModal(true)}
+          className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#673AB7] hover:bg-[#5E35B1] text-white text-xs font-bold rounded-xl transition shadow-xs cursor-pointer self-start sm:self-auto"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Add Service Partner</span>
+        </button>
+      </div>
+
+      {/* Submission Success Toast */}
+      {submissionSuccessNotice && (
+        <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 flex items-center justify-between animate-fade-in">
+          <div className="flex items-center gap-2">
+            <Check className="w-4 h-4 text-emerald-600" />
+            <span>
+              Partner registration submitted successfully! Status set to <strong>Pending Verification</strong> and routed to Super Admin for approval.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSubmissionSuccessNotice(false)}
+            className="text-emerald-700 hover:text-emerald-900 font-bold"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Society Admin Routing Notice */}
+      <div className="p-3.5 bg-purple-50/60 border border-purple-100 rounded-2xl flex items-start gap-3 text-xs text-gray-700">
+        <ShieldCheck className="w-4 h-4 text-[#673AB7] shrink-0 mt-0.5" />
+        <div>
+          <span className="font-bold text-gray-900">Centralized Security & Police Verification Policy: </span>
+          All local service partners registered by the Society Admin are submitted with status <strong className="text-amber-700">Pending Verification</strong> and routed to the Super Admin Security Ops team for document KYC check prior to gate authorization.
         </div>
       </div>
 
+      {/* Partners Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {partners.map((sp) => (
-          <div key={sp.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 hover:border-purple-200 transition">
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-[#F1F9FC] text-[#673AB7] flex items-center justify-center font-bold">
-                  <ShoppingBag className="w-5 h-5" />
+        {partners.map((sp) => {
+          const isPending = sp.status === 'PENDING' || sp.status === 'pending';
+          return (
+            <div
+              key={sp.id}
+              className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 hover:border-purple-200 transition flex flex-col justify-between"
+            >
+              <div>
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-[#F1F9FC] text-[#673AB7] flex items-center justify-center font-bold">
+                      <ShoppingBag className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-gray-900">{sp.companyName}</h3>
+                      <span className="text-xs px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 font-medium">
+                        {sp.category}
+                      </span>
+                    </div>
+                  </div>
+
+                  {isPending ? (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                      Pending Approval
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      Active Partner
+                    </span>
+                  )}
                 </div>
-                <div>
-                  <h3 className="font-bold text-gray-900">{sp.companyName}</h3>
-                  <span className="text-xs px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 font-medium">
-                    {sp.category}
-                  </span>
+
+                <div className="mt-4 pt-3 border-t border-gray-50 space-y-1.5 text-xs text-gray-600">
+                  <div>
+                    Contact: <span className="font-semibold text-gray-900">{sp.contactPerson}</span>
+                  </div>
+                  <div>
+                    Phone: <span className="font-mono text-gray-800">{sp.phoneNumber}</span>
+                  </div>
+                  <div>
+                    Verification:{' '}
+                    {isPending ? (
+                      <span className="font-semibold text-amber-600">Routing to Super Admin</span>
+                    ) : (
+                      <span className="font-semibold text-emerald-600">Police Verified & Approved</span>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div className="mt-4 pt-3 border-t border-gray-50 space-y-1.5 text-xs text-gray-600">
-              <div>Contact: <span className="font-semibold text-gray-900">{sp.contactPerson}</span></div>
-              <div>Phone: <span className="font-mono text-gray-800">{sp.phoneNumber}</span></div>
-              <div>Verification: <span className="font-semibold text-emerald-600">Police Verified</span></div>
+              <div className="mt-4 pt-3 border-t border-gray-50 flex items-center justify-between">
+                <span className="text-xs text-gray-500 font-medium">Society Gate Entry</span>
+                {isPending ? (
+                  <span className="text-[11px] text-amber-600 font-medium bg-amber-50 px-2.5 py-1 rounded-lg">
+                    Awaiting Super Admin
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => onToggleSocietyAccess(sp.id)}
+                    className="text-xs px-3 py-1 bg-[#673AB7] text-white hover:bg-[#5E35B1] rounded-lg font-medium transition cursor-pointer"
+                  >
+                    Permitted
+                  </button>
+                )}
+              </div>
             </div>
-
-            <div className="mt-4 pt-3 border-t border-gray-50 flex items-center justify-between">
-              <span className="text-xs text-gray-500 font-medium">Society Gate Entry</span>
-              <button
-                onClick={() => onToggleSocietyAccess(sp.id)}
-                className="text-xs px-3 py-1 bg-[#673AB7] text-white hover:bg-[#5E35B1] rounded-lg font-medium transition"
-              >
-                Permitted
-              </button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
+
+      {/* 1B. PARTNER ONBOARDING MODAL (SOCIETY ADMIN SCOPE) */}
+      <PartnerOnboardingModal
+        isOpen={showAddPartnerModal}
+        onClose={() => setShowAddPartnerModal(false)}
+        onSuccess={async () => {
+          setSubmissionSuccessNotice(true);
+          if (onRefresh) await onRefresh();
+        }}
+        onboardedBy="society_admin"
+        currentSocietyId={society.id}
+        societies={[society]}
+      />
     </div>
   );
 };

@@ -7,9 +7,11 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { societyAdminService } from '../../services/firebase/societyAdmin.service';
+import { getAllSocieties, getAllServicePartners } from '../../services/firebase/superadmin.service';
 import { SocietyAdminSidebar, SocietyAdminTab } from '../../components/societyAdmin/SocietyAdminSidebar';
 import { SocietyAdminHeader } from '../../components/societyAdmin/SocietyAdminHeader';
 import { SocietyOverviewView } from '../../components/societyAdmin/SocietyOverviewView';
+import { OutstandingDuesBanner } from '../../components/societyAdmin/OutstandingDuesBanner';
 import { 
   SocietyProfileView, 
   SocietyBuildingsView, 
@@ -34,7 +36,8 @@ import {
   SocietyMaintenanceView, 
   SocietyAmenitiesView, 
   SocietyCommunityView, 
-  SocietyServicePartnersView 
+  SocietyServicePartnersView,
+  ServicePartnerItem,
 } from '../../components/societyAdmin/SocietyOperationsViews';
 import { 
   SocietyReportsView, 
@@ -122,11 +125,11 @@ export const SocietyAdminDashboard: React.FC = () => {
   const [settings, setSettings] = useState<SocietyDetailedSettings | null>(null);
   const [auditLogs, setAuditLogs] = useState<SocietyAuditLogEntry[]>([]);
 
-  const partners = [
-    { id: 'sp_1', companyName: 'Bisleri Pure Water Delivery', category: 'Water Supply', contactPerson: 'Sunil Verma', phoneNumber: '+91 98201 11223' },
-    { id: 'sp_2', companyName: 'Airtel Xstream Fiber Broadband', category: 'Internet / ISP', contactPerson: 'Pradeep Joshi', phoneNumber: '+91 98201 44556' },
-    { id: 'sp_3', companyName: 'Otis Elevator AMC', category: 'Lift Maintenance', contactPerson: 'Anand Kumar', phoneNumber: '+91 98201 77889' },
-  ];
+  const [partners, setPartners] = useState<ServicePartnerItem[]>([
+    { id: 'sp_1', companyName: 'Bisleri Pure Water Delivery', category: 'Water Supply', contactPerson: 'Sunil Verma', phoneNumber: '+91 98201 11223', status: 'ACTIVE' },
+    { id: 'sp_2', companyName: 'Airtel Xstream Fiber Broadband', category: 'Internet / ISP', contactPerson: 'Pradeep Joshi', phoneNumber: '+91 98201 44556', status: 'ACTIVE' },
+    { id: 'sp_3', companyName: 'Otis Elevator AMC', category: 'Lift Maintenance', contactPerson: 'Anand Kumar', phoneNumber: '+91 98201 77889', status: 'ACTIVE' },
+  ]);
 
   // Load All Society-Scoped Datasets
   const loadSocietyData = async () => {
@@ -192,6 +195,50 @@ export const SocietyAdminDashboard: React.FC = () => {
       setStaff(stfData);
       setSettings(setData);
       setAuditLogs(audData);
+
+      // Sync latest registered society details and documents from superadmin store
+      try {
+        const allSocs = await getAllSocieties();
+        const matched = allSocs.find(
+          (s) =>
+            s.id === currentSocietyId ||
+            (user?.societyId && s.id === user.societyId) ||
+            ((user as any)?.societyCode && s.societyCode === (user as any).societyCode) ||
+            (user?.societyName && (s.societyName === user.societyName || s.name === user.societyName))
+        );
+        if (matched) {
+          setSociety((prev) => ({ ...prev, ...matched }));
+        }
+      } catch (socErr) {
+        console.warn('Could not sync remote society profile:', socErr);
+      }
+
+      // Sync service partners assigned to this society
+      try {
+        const allSp = await getAllServicePartners();
+        const mappedSp = allSp
+          .filter(
+            (sp) =>
+              !sp.assignedSocietyId ||
+              sp.assignedSocietyId === currentSocietyId ||
+              sp.assignedSocietyName === society.societyName
+          )
+          .map((sp) => ({
+            id: sp.uid,
+            companyName: sp.businessName || sp.name || 'Service Partner',
+            category: (sp.serviceDomain && sp.serviceDomain[0]) || (sp.serviceCategories && sp.serviceCategories[0]) || 'General',
+            contactPerson: sp.name || sp.businessName || 'Representative',
+            phoneNumber: sp.contactNumber || sp.phone || '',
+            status: sp.verificationStatus || sp.status || 'ACTIVE',
+            onboardedBy: sp.onboardedBy,
+          }));
+
+        if (mappedSp.length > 0) {
+          setPartners(mappedSp);
+        }
+      } catch (spErr) {
+        console.warn('Could not sync service partners:', spErr);
+      }
     } catch (err) {
       console.error('Error loading society admin data:', err);
     } finally {
@@ -469,6 +516,9 @@ export const SocietyAdminDashboard: React.FC = () => {
 
         {/* Viewport Content */}
         <main className="flex-1 p-4 sm:p-6 lg:p-8 w-full">
+          {/* Outstanding Balance Notification: Overdue Subscription Alert */}
+          <OutstandingDuesBanner society={society} onPaymentSettled={loadSocietyData} />
+
           {activeTab === 'dashboard' && (
             <SocietyOverviewView
               analytics={analytics}
@@ -629,6 +679,7 @@ export const SocietyAdminDashboard: React.FC = () => {
               society={society}
               partners={partners}
               onToggleSocietyAccess={handleToggleSocietyAccess}
+              onRefresh={loadSocietyData}
             />
           )}
 

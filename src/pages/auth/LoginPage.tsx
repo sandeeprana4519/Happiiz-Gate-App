@@ -41,6 +41,7 @@ import {
   Phone,
   ShieldCheck,
   Building2,
+  Wrench,
 } from 'lucide-react';
 
 type AuthView = 'LOGIN' | 'FORGOT_PHONE' | 'FORGOT_OTP' | 'FORGOT_RESET' | 'FORGOT_SUCCESS';
@@ -112,6 +113,23 @@ export const LoginPage: React.FC = () => {
   const handleRedirectByRole = (profile: UserProfile, resolvedRole?: UserRole) => {
     const role: UserRole =
       resolvedRole || profile.primaryRole || (profile.isSuperAdmin ? 'SUPER_ADMIN' : 'RESIDENT');
+
+    // Strict Service Partner Verification Status Guard
+    if (role === 'SERVICE_PARTNER') {
+      const pStatus = String(profile.accountStatus || '').toUpperCase();
+      if (pStatus === 'PENDING') {
+        setError(
+          'Application Under Review: Your profile and documents are pending verification by Super Admin. You will receive login access once approved.'
+        );
+        return;
+      }
+      if (pStatus === 'REJECTED') {
+        setError(
+          'Application Rejected: Your verification was declined. Please contact support or resubmit your documents.'
+        );
+        return;
+      }
+    }
 
     // Sync AuthContext state immediately
     loginWithDemoSession(profile);
@@ -498,6 +516,35 @@ export const LoginPage: React.FC = () => {
                 Login
               </Button>
             </form>
+
+            {/* Prominent Service Partner Self-Registration Callout */}
+            <div className="p-3.5 rounded-xl bg-gradient-to-r from-blue-50/80 via-indigo-50/70 to-blue-50/80 border border-blue-200/80 shadow-xs space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                    <Wrench className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
+                      Service Partner / Technician?
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700">
+                        Join Us
+                      </span>
+                    </h3>
+                    <p className="text-[11px] text-gray-600">
+                      Deliver services to 50,000+ residents across verified societies
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <Link
+                to="/onboarding/service-partner"
+                className="w-full h-9 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-2 group cursor-pointer"
+              >
+                <span>Register as Service Partner / Apply for Jobs</span>
+                <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+              </Link>
+            </div>
 
             {/* OR AUTHENTICATE WITH Divider (Matching Reference Screenshot) */}
             <div className="relative flex items-center justify-center my-6">

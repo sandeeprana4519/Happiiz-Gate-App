@@ -72,15 +72,57 @@ export interface SocietyMembership {
   rejectionReason?: string;
 }
 
+export interface PartnerKycDocuments {
+  nationalIdType?: string;
+  nationalIdNumber?: string;
+  nationalIdUrl?: string;
+  panNumber?: string;
+  panUrl?: string;
+  dlNumber?: string;
+  dlUrl?: string;
+  isPoliceVerified?: boolean;
+  policeVerificationDate?: string;
+  policeVerificationUrl?: string;
+  bankDetails?: {
+    accountHolderName?: string;
+    accNo?: string;
+    ifsc?: string;
+    bankName?: string;
+    passbookUrl?: string;
+  };
+  agreementUrls?: string[];
+}
+
 export interface ServicePartnerProfile {
   uid: string;
+  id?: string;
+  name?: string;
   businessName: string;
+  email?: string;
   contactNumber: string;
+  phone?: string;
+  password?: string;
+  passwordHash?: string;
   businessAddress: string;
+  address?: string;
   serviceCategories: string[];
+  serviceDomain?: string[];
   serviceAreas: string[];
+  serviceArea?: string;
+  assignedSocietyId?: string;
+  assignedSocietyName?: string;
   verificationStatus: MembershipStatus;
+  status?: 'pending' | 'active' | 'rejected' | 'suspended';
+  onboardedBy?: 'super_admin' | 'society_admin' | 'self';
+  societyAdminId?: string;
+  rejectionReason?: string;
+  documents?: PartnerKycDocuments;
+  servicesOffered?: any[];
+  rateCard?: any[];
   createdAt: string;
+  updatedAt?: string;
+  verifiedAt?: string;
+  verifiedBy?: string;
   reviewedBy?: string;
   reviewedAt?: string;
 }

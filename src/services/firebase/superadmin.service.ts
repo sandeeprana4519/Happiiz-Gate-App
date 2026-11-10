@@ -268,7 +268,7 @@ export async function getAllSocieties(): Promise<Society[]> {
 
 export async function updateSocietyStatus(
   societyId: string,
-  newStatus: 'ACTIVE' | 'SUSPENDED' | 'PENDING_VERIFICATION',
+  newStatus: 'ACTIVE' | 'SUSPENDED' | 'PENDING_VERIFICATION' | 'INACTIVE',
   reason: string
 ): Promise<boolean> {
   const list = await getAllSocieties();
@@ -809,23 +809,231 @@ export async function getAllServicePartners(): Promise<ServicePartnerProfile[]> 
   return getStoredArray<ServicePartnerProfile>('happiiz_sa_partners', MOCK_SERVICE_PARTNERS);
 }
 
+export async function createServicePartner(
+  data: Partial<ServicePartnerProfile> & { password?: string }
+): Promise<ServicePartnerProfile> {
+  const partners = await getAllServicePartners();
+  const uid = data.uid || `usr_partner_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+  const now = new Date().toISOString();
+
+  // Enforce rule: if onboarded by society_admin or self, status MUST be PENDING
+  const onboardedBy = data.onboardedBy || 'super_admin';
+  const initialStatus =
+    onboardedBy === 'super_admin' ? (data.verificationStatus || 'ACTIVE') : 'PENDING';
+
+  const newPartner: ServicePartnerProfile = {
+    uid,
+    id: uid,
+    name: data.name || data.businessName || 'Service Partner',
+    businessName: data.businessName || data.name || 'Service Agency',
+    contactNumber: data.contactNumber || data.phone || '',
+    phone: data.phone || data.contactNumber || '',
+    email: data.email || `${uid}@happiizgate.com`,
+    businessAddress: data.businessAddress || data.address || '',
+    address: data.address || data.businessAddress || '',
+    serviceCategories: data.serviceCategories || (data.serviceDomain ? data.serviceDomain : ['General Services']),
+    serviceDomain: data.serviceDomain || data.serviceCategories || ['General Services'],
+    serviceAreas: data.serviceAreas || (data.serviceArea ? [data.serviceArea] : ['All Zones']),
+    serviceArea: data.serviceArea || (data.serviceAreas && data.serviceAreas[0]) || 'All Zones',
+    assignedSocietyId: data.assignedSocietyId || '',
+    assignedSocietyName: data.assignedSocietyName || '',
+    verificationStatus: initialStatus,
+    status: (initialStatus.toLowerCase() as any),
+    onboardedBy,
+    societyAdminId: data.societyAdminId || '',
+    documents: data.documents || {
+      isPoliceVerified: true,
+      nationalIdType: 'Aadhaar Card',
+    },
+    servicesOffered: data.rateCard || data.servicesOffered,
+    rateCard: data.rateCard || data.servicesOffered,
+    createdAt: now,
+    verifiedAt: initialStatus === 'ACTIVE' ? now : undefined,
+    verifiedBy: initialStatus === 'ACTIVE' ? (auth?.currentUser?.uid || 'usr_super_admin_01') : undefined,
+  };
+
+  const updatedPartners = [newPartner, ...partners.filter((p) => p.uid !== uid)];
+  setStoredArray('happiiz_sa_partners', updatedPartners);
+
+  // If rateCard provided, sync to marketplace partner custom rates store
+  if (data.rateCard && data.rateCard.length > 0) {
+    try {
+      const rawRates = localStorage.getItem('hpz_marketplace_partner_custom_rates');
+      const customRatesStore = rawRates ? JSON.parse(rawRates) : {};
+      customRatesStore[uid] = data.rateCard;
+      localStorage.setItem('hpz_marketplace_partner_custom_rates', JSON.stringify(customRatesStore));
+    } catch (_) {}
+  }
+
+  // If password provided, save for authentication
+  if (data.password) {
+    setUserStoredPassword(uid, data.password);
+  }
+
+  // Create corresponding UserProfile in user registry
+  const users = getStoredArray<UserProfile>('happiiz_sa_users', []);
+  const newUser: UserProfile = {
+    uid,
+    phoneNumber: newPartner.contactNumber,
+    fullName: newPartner.businessName,
+    email: newPartner.email,
+    preferredLanguage: 'en',
+    accountStatus: initialStatus,
+    primaryRole: 'SERVICE_PARTNER',
+    role: 'SERVICE_PARTNER',
+    partnerCompany: newPartner.businessName,
+    societyId: newPartner.assignedSocietyId,
+    societyName: newPartner.assignedSocietyName,
+    onboardingCompleted: true,
+    createdAt: now,
+    updatedAt: now,
+    lastLoginAt: now,
+  };
+  setStoredArray('happiiz_sa_users', [newUser, ...users.filter((u: UserProfile) => u.uid !== uid)]);
+
+  if (db && auth?.currentUser && !auth.currentUser.uid.startsWith('dev_')) {
+    try {
+      await setDoc(doc(db, SA_COLLECTIONS.SERVICE_PARTNERS, uid), newPartner);
+      await setDoc(doc(db, SA_COLLECTIONS.USERS, uid), newUser);
+    } catch (err) {
+      console.warn('[ServicePartner] Firestore sync:', err);
+    }
+  }
+
+  await recordAuditLog(
+    'ONBOARD_SERVICE_PARTNER',
+    uid,
+    'USER',
+    `Registered service partner ${newPartner.businessName} (Status: ${initialStatus}, Source: ${onboardedBy})`
+  );
+
+  return newPartner;
+}
+
+export async function approvePartnerApplication(partnerUid: string): Promise<boolean> {
+  const partners = await getAllServicePartners();
+  const partner = partners.find((p) => p.uid === partnerUid);
+  if (!partner) return false;
+
+  const now = new Date().toISOString();
+  const adminUid = auth?.currentUser?.uid || 'usr_super_admin_01';
+
+  const updatedList = partners.map((p) =>
+    p.uid === partnerUid
+      ? {
+          ...p,
+          verificationStatus: 'ACTIVE' as const,
+          status: 'active' as const,
+          verifiedAt: now,
+          verifiedBy: adminUid,
+          reviewedAt: now,
+          reviewedBy: adminUid,
+          rejectionReason: undefined,
+        }
+      : p
+  );
+  setStoredArray('happiiz_sa_partners', updatedList);
+
+  // Update user profile status to ACTIVE
+  const users = getStoredArray<UserProfile>('happiiz_sa_users', []);
+  const updatedUsers = users.map((u: UserProfile) =>
+    u.uid === partnerUid ? { ...u, accountStatus: 'ACTIVE' as const } : u
+  );
+  setStoredArray('happiiz_sa_users', updatedUsers);
+
+  if (db && auth?.currentUser && !auth.currentUser.uid.startsWith('dev_')) {
+    try {
+      await updateDoc(doc(db, SA_COLLECTIONS.SERVICE_PARTNERS, partnerUid), {
+        verificationStatus: 'ACTIVE',
+        status: 'active',
+        verifiedAt: now,
+        verifiedBy: adminUid,
+      });
+      await updateDoc(doc(db, SA_COLLECTIONS.USERS, partnerUid), {
+        accountStatus: 'ACTIVE',
+      });
+    } catch (err) {
+      console.warn('[ServicePartner] Firestore approve sync:', err);
+    }
+  }
+
+  await recordAuditLog(
+    'APPROVE_SERVICE_PARTNER',
+    partnerUid,
+    'USER',
+    `Approved partner verification for ${partner.businessName}`
+  );
+  return true;
+}
+
+export async function rejectPartnerApplication(partnerUid: string, reason: string): Promise<boolean> {
+  const partners = await getAllServicePartners();
+  const partner = partners.find((p) => p.uid === partnerUid);
+  if (!partner) return false;
+
+  const now = new Date().toISOString();
+  const adminUid = auth?.currentUser?.uid || 'usr_super_admin_01';
+
+  const updatedList = partners.map((p) =>
+    p.uid === partnerUid
+      ? {
+          ...p,
+          verificationStatus: 'REJECTED' as const,
+          status: 'rejected' as const,
+          rejectionReason: reason,
+          reviewedAt: now,
+          reviewedBy: adminUid,
+        }
+      : p
+  );
+  setStoredArray('happiiz_sa_partners', updatedList);
+
+  // Update user profile status to REJECTED
+  const users = getStoredArray<UserProfile>('happiiz_sa_users', []);
+  const updatedUsers = users.map((u: UserProfile) =>
+    u.uid === partnerUid ? { ...u, accountStatus: 'REJECTED' as const } : u
+  );
+  setStoredArray('happiiz_sa_users', updatedUsers);
+
+  await recordAuditLog(
+    'REJECT_SERVICE_PARTNER',
+    partnerUid,
+    'USER',
+    `Rejected partner verification for ${partner.businessName}. Reason: ${reason}`
+  );
+  return true;
+}
+
 export async function reviewPartnerKyc(
   partnerUid: string,
   newStatus: 'ACTIVE' | 'REJECTED' | 'SUSPENDED',
   reason: string
 ): Promise<boolean> {
+  if (newStatus === 'ACTIVE') {
+    return approvePartnerApplication(partnerUid);
+  } else if (newStatus === 'REJECTED') {
+    return rejectPartnerApplication(partnerUid, reason);
+  }
+
   const list = await getAllServicePartners();
   const updated = list.map((p) =>
     p.uid === partnerUid
       ? {
           ...p,
           verificationStatus: newStatus,
+          status: (newStatus.toLowerCase() as any),
           reviewedBy: auth?.currentUser?.uid || 'usr_super_admin_01',
           reviewedAt: new Date().toISOString(),
         }
       : p
   );
   setStoredArray('happiiz_sa_partners', updated);
+
+  const users = getStoredArray<UserProfile>('happiiz_sa_users', []);
+  const updatedUsers = users.map((u: UserProfile) =>
+    u.uid === partnerUid ? { ...u, accountStatus: newStatus } : u
+  );
+  setStoredArray('happiiz_sa_users', updatedUsers);
 
   await recordAuditLog(`PARTNER_KYC_${newStatus}`, partnerUid, 'USER', reason);
   return true;
@@ -856,6 +1064,151 @@ export async function saveSubscriptionPlan(plan: SubscriptionPlan): Promise<bool
     `Updated parameters for ${plan.name}`
   );
   return true;
+}
+
+export async function createSubscriptionPlan(
+  planData: Omit<SubscriptionPlan, 'id' | 'createdAt'>
+): Promise<SubscriptionPlan> {
+  const plans = await getSubscriptionPlans();
+  const newPlan: SubscriptionPlan = {
+    ...planData,
+    id: `plan_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    createdAt: new Date().toISOString(),
+  };
+  const updated = [...plans, newPlan];
+  setStoredArray('happiiz_sa_plans', updated);
+
+  if (db && auth?.currentUser && !auth.currentUser.uid.startsWith('dev_')) {
+    try {
+      await setDoc(doc(db, SA_COLLECTIONS.SUBSCRIPTION_PLANS, newPlan.id), newPlan);
+    } catch (err) {
+      console.warn('[SubscriptionPlan] Firestore sync:', err);
+    }
+  }
+
+  await recordAuditLog(
+    'CREATE_SUBSCRIPTION_PLAN',
+    newPlan.id,
+    'SUBSCRIPTION',
+    `Created new subscription plan ${newPlan.name} (₹${newPlan.price}/${newPlan.billingCycle})`
+  );
+  return newPlan;
+}
+
+export async function updateSubscriptionPlan(
+  planId: string,
+  updates: Partial<SubscriptionPlan>
+): Promise<boolean> {
+  const plans = await getSubscriptionPlans();
+  const existing = plans.find((p) => p.id === planId);
+  if (!existing) return false;
+
+  const updatedPlan: SubscriptionPlan = {
+    ...existing,
+    ...updates,
+    updatedAt: new Date().toISOString(),
+  };
+  const updatedList = plans.map((p) => (p.id === planId ? updatedPlan : p));
+  setStoredArray('happiiz_sa_plans', updatedList);
+
+  if (db && auth?.currentUser && !auth.currentUser.uid.startsWith('dev_')) {
+    try {
+      await updateDoc(doc(db, SA_COLLECTIONS.SUBSCRIPTION_PLANS, planId), updates);
+    } catch (err) {
+      console.warn('[SubscriptionPlan] Firestore update:', err);
+    }
+  }
+
+  await recordAuditLog(
+    'UPDATE_SUBSCRIPTION_PLAN',
+    planId,
+    'SUBSCRIPTION',
+    `Updated parameters for plan ${existing.name}`
+  );
+  return true;
+}
+
+export async function deleteSubscriptionPlan(planId: string): Promise<boolean> {
+  const plans = await getSubscriptionPlans();
+  const existing = plans.find((p) => p.id === planId);
+  if (!existing) return false;
+
+  const updatedList = plans.filter((p) => p.id !== planId);
+  setStoredArray('happiiz_sa_plans', updatedList);
+
+  if (db && auth?.currentUser && !auth.currentUser.uid.startsWith('dev_')) {
+    try {
+      await deleteDoc(doc(db, SA_COLLECTIONS.SUBSCRIPTION_PLANS, planId));
+    } catch (err) {
+      console.warn('[SubscriptionPlan] Firestore delete:', err);
+    }
+  }
+
+  await recordAuditLog(
+    'DELETE_SUBSCRIPTION_PLAN',
+    planId,
+    'SUBSCRIPTION',
+    `Deleted subscription plan ${existing.name}`
+  );
+  return true;
+}
+
+export async function settleSocietyDues(
+  societyId: string,
+  paymentMethod: 'UPI' | 'Card' | 'NetBanking' | 'Bank Transfer' = 'UPI'
+): Promise<{ success: boolean; transactionId?: string; invoiceId?: string }> {
+  const societies = await getAllSocieties();
+  const soc = societies.find((s) => s.id === societyId);
+  if (!soc) return { success: false };
+
+  const duesAmount = soc.pendingDues || 14999;
+  const invoiceId = soc.duesInvoiceNumber || `INV-${Date.now().toString().slice(-4)}`;
+  const txnId = `HPZ-TXN-${Date.now().toString().slice(-6)}`;
+
+  // Update society
+  const updatedSocs = societies.map((s) =>
+    s.id === societyId
+      ? { ...s, pendingDues: 0, duesStatus: 'PAID' as const }
+      : s
+  );
+  setStoredArray('happiiz_sa_societies', updatedSocs);
+
+  // Add transaction to ledger
+  const txns = await getFinancialTransactions();
+  const newTxn: FinancialTransaction = {
+    id: `tx_${Date.now()}`,
+    transactionNumber: txnId,
+    invoiceId: invoiceId,
+    referenceId: societyId,
+    entityName: soc.societyName || soc.name || 'Society',
+    type: 'SUBSCRIPTION',
+    amount: duesAmount,
+    currency: 'INR',
+    paymentMethod,
+    billingCycle: 'Monthly',
+    status: 'SUCCESS',
+    paymentDate: new Date().toISOString(),
+    gatewayReference: `pay_settled_${Date.now().toString().slice(-6)}`,
+    description: `Settlement for ${invoiceId} - Platform SaaS Subscription`,
+  };
+  setStoredArray('happiiz_sa_txns', [newTxn, ...txns]);
+
+  syncBus.broadcast(
+    'SERVICE_INVOICE_PAID',
+    societyId,
+    auth?.currentUser?.uid || 'usr_super_admin_01',
+    'SUPER_ADMIN',
+    { amount: duesAmount, invoiceId, transactionId: txnId }
+  );
+
+  await recordAuditLog(
+    'SETTLE_SOCIETY_DUES',
+    societyId,
+    'TRANSACTION',
+    `Settled outstanding dues of ₹${duesAmount} for ${soc.societyName} via ${paymentMethod}`
+  );
+
+  return { success: true, transactionId: txnId, invoiceId };
 }
 
 export async function getSocietySubscriptions(): Promise<SocietySubscription[]> {

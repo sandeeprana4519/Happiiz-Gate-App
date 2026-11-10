@@ -15,6 +15,8 @@ import { SocietyAdminsSection } from '../../components/superadmin/SocietyAdminsS
 import { ResidentsSection } from '../../components/superadmin/ResidentsSection';
 import { GuardsSection } from '../../components/superadmin/GuardsSection';
 import { ServicePartnersSection } from '../../components/superadmin/ServicePartnersSection';
+import { MarketplaceServicesSection } from '../../components/superadmin/MarketplaceServicesSection';
+import { Partner360CrmSection } from '../../components/superadmin/Partner360CrmSection';
 import { SubscriptionsSection } from '../../components/superadmin/SubscriptionsSection';
 import { FinanceSection } from '../../components/superadmin/FinanceSection';
 import { SupportTicketsSection } from '../../components/superadmin/SupportTicketsSection';
@@ -75,18 +77,20 @@ import {
 import {
   MOCK_PLATFORM_SETTINGS,
 } from '../../services/mock/mockData';
-import { X, RefreshCw } from 'lucide-react';
+import { X, RefreshCw, ChevronRight } from 'lucide-react';
 
 export const SuperAdminDashboard: React.FC = () => {
   const { user, isFirebaseConfigured } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Active tab state (synced with ?tab= search param)
-  const initialTab = (searchParams.get('tab') as SuperAdminTab) || 'dashboard';
+  const rawTab = (searchParams.get('tab') as SuperAdminTab) || 'dashboard';
+  const initialTab: SuperAdminTab = (rawTab as string) === 'onboarding' ? 'societies' : rawTab;
   const [currentTab, setCurrentTab] = useState<SuperAdminTab>(initialTab);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
+  const [partnerSubTab, setPartnerSubTab] = useState<'CRM' | 'COMPLIANCE'>('CRM');
 
   // Data states
   const [stats, setStats] = useState<SuperAdminStats>({
@@ -248,8 +252,12 @@ export const SuperAdminDashboard: React.FC = () => {
         return { title: 'SaaS Subscription Plans & Packages', subtitle: 'Configure tenant pricing tiers, gate quotas, and custom enterprise plans' };
       case 'finance':
         return { title: 'Billing, Subscriptions & Revenue Ledger', subtitle: 'Platform subscription collections, payment gateways, and automated financial accounting' };
+      case 'marketplace-services':
+        return { title: 'Service Catalog & Management', subtitle: 'Configure doorstep services, pricing models, platform commission cuts, and scope of work' };
       case 'partners':
-        return { title: 'Service Partner Marketplace', subtitle: 'Vendor compliance, contractor trade licenses, and KYC verification' };
+        return { title: 'Our Partners · 360° CRM & Analytics', subtitle: 'Complete 360° partner directory, date-wise ledger, customer ratings, revenue splits, and PDF statements' };
+      case 'partner-kyc':
+        return { title: 'Add New Partner & Verification Portal', subtitle: 'Onboard service partners, review KYC documents, police clearance, and verify applications' };
       case 'users':
         return { title: 'Global User Security Directory', subtitle: 'Centralized registry across all tenant societies, guards, service partners and platform staff' };
       case 'roles':
@@ -366,9 +374,7 @@ export const SuperAdminDashboard: React.FC = () => {
               <CompaniesSection companies={companies} onRefresh={loadAllData} />
             )}
 
-            {currentTab === 'onboarding' && (
-              <OnboardingSection cases={onboardingCases} onRefresh={loadAllData} />
-            )}
+
 
             {currentTab === 'subscriptions' && (
               <SubscriptionsSection
@@ -387,9 +393,21 @@ export const SuperAdminDashboard: React.FC = () => {
               />
             )}
 
+            {currentTab === 'marketplace-services' && (
+              <MarketplaceServicesSection
+                onRefresh={loadAllData}
+                partners={partners}
+              />
+            )}
+
             {currentTab === 'partners' && (
+              <Partner360CrmSection onRefresh={loadAllData} />
+            )}
+
+            {currentTab === 'partner-kyc' && (
               <ServicePartnersSection
                 partners={partners}
+                societies={societies}
                 onRefresh={loadAllData}
               />
             )}

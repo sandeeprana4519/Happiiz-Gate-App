@@ -479,119 +479,78 @@ export const CompaniesSection: React.FC<CompaniesSectionProps> = ({
 
       {/* Table of Companies */}
       <div className="bg-white rounded-2xl border border-[#E6F1F5] shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="w-full overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-[#F1F9FC] text-[#555555] font-bold border-b border-[#E6F1F5] uppercase tracking-wider text-[11px]">
-                <th className="py-3 px-4">Company & Code</th>
-                <th className="py-3 px-4">Type & Location</th>
-                <th className="py-3 px-4">Campus Scale</th>
-                <th className="py-3 px-4">Subscription</th>
-                <th className="py-3 px-4">Admin Login</th>
-                <th className="py-3 px-4">Documents</th>
-                <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-4 text-right">Actions</th>
+                <th className="py-3 px-3.5 w-[30%]">Company & Code</th>
+                <th className="py-3 px-3 w-[26%]">Location & Scale</th>
+                <th className="py-3 px-3 w-[26%]">Admin Credentials</th>
+                <th className="py-3 px-3 w-[6%] text-center">Status</th>
+                <th className="py-3 px-3 w-[12%] text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#E6F1F5]">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-gray-400">
+                  <td colSpan={5} className="py-12 text-center text-gray-400">
                     <Briefcase className="w-8 h-8 mx-auto mb-2 text-gray-300" />
                     No companies found matching the criteria.
                   </td>
                 </tr>
               ) : (
                 filtered.map((cmp) => {
-                  const docCount = (cmp.documents && cmp.documents.length) || 0;
                   const isSuspendedOrInactive = cmp.status === 'INACTIVE' || cmp.status === 'SUSPENDED';
 
                   return (
                     <tr key={cmp.id} className="hover:bg-[#F9FCFD] transition">
-                      {/* Name & Code */}
-                      <td className="py-3 px-4">
+                      {/* 1. Company Name & Code (2 Clean Lines) */}
+                      <td className="py-3 px-3.5">
                         <div className="flex items-center gap-2.5">
                           <div className="w-8 h-8 rounded-xl bg-purple-50 text-[#673AB7] flex items-center justify-center font-bold shrink-0">
                             <Briefcase className="w-4 h-4" />
                           </div>
-                          <div>
-                            <div className="font-extrabold text-[#111111] text-xs leading-tight">
+                          <div className="min-w-0 flex-1">
+                            <div className="font-bold text-[#111111] text-xs leading-snug truncate" title={cmp.companyName}>
                               {cmp.companyName}
                             </div>
                             <div className="flex items-center gap-1.5 mt-0.5">
-                              <span className="font-mono font-bold text-[10px] px-1.5 py-0.2 rounded bg-purple-50 text-[#673AB7]">
+                              <span className="font-mono font-bold text-[10px] px-1.5 py-0.2 rounded bg-purple-100 text-[#673AB7]">
                                 {cmp.companyCode || 'CMP-PENDING'}
                               </span>
-                              <span className="text-[10px] text-gray-400 font-mono">
-                                {cmp.registrationNumber || ''}
+                              <span className="text-[10px] text-gray-400 font-medium truncate">
+                                • {cmp.companyType}
                               </span>
                             </div>
                           </div>
                         </div>
                       </td>
 
-                      {/* Type & Location */}
-                      <td className="py-3 px-4">
-                        <div className="font-semibold text-gray-800 text-[11px]">{cmp.companyType}</div>
-                        <div className="flex items-center gap-1 text-[11px] text-gray-500">
-                          <MapPin className="w-3 h-3 text-gray-400 shrink-0" />
-                          <span className="truncate max-w-[140px]">{cmp.city}, {cmp.state}</span>
+                      {/* 2. Location & Scale (2 Clean Lines) */}
+                      <td className="py-3 px-3">
+                        <div className="font-bold text-gray-800 text-xs flex items-center gap-1 truncate">
+                          <MapPin className="w-3 h-3 text-[#673AB7] shrink-0" />
+                          <span className="truncate">{cmp.city}, {cmp.state}</span>
+                        </div>
+                        <div className="text-[11px] text-gray-500 mt-0.5 truncate">
+                          {cmp.totalBuildings || 1} Buildings • {cmp.totalOffices || 10} Units ({cmp.totalGates || 2} Gates)
                         </div>
                       </td>
 
-                      {/* Scale */}
-                      <td className="py-3 px-4">
-                        <div className="font-bold text-gray-800">
-                          {cmp.totalBuildings || 1} Buildings • {cmp.totalOffices || 10} Units
-                        </div>
-                        <div className="text-[10px] text-gray-500">
-                          {cmp.totalGates || 2} Security Gates
-                        </div>
-                      </td>
-
-                      {/* Subscription */}
-                      <td className="py-3 px-4">
-                        <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-[#673AB7]">
-                          {cmp.subscriptionPlan || cmp.subscriptionType || 'Enterprise'}
-                        </span>
-                        <div className="text-[10px] text-gray-500 mt-0.5">
-                          {cmp.subscriptionDuration || '1 Year'}
-                        </div>
-                      </td>
-
-                      {/* Admin Login */}
-                      <td className="py-3 px-4">
-                        <div className="font-mono text-[11px] text-gray-800 font-semibold truncate max-w-[150px]">
+                      {/* 3. Admin Credentials (2 Clean Lines) */}
+                      <td className="py-3 px-3">
+                        <div className="font-mono text-xs text-gray-800 font-semibold select-all truncate" title={cmp.adminLoginEmail || cmp.contactEmail}>
                           {cmp.adminLoginEmail || cmp.contactEmail}
                         </div>
-                        <div className="text-[10px] text-gray-500">
-                          Admin: {cmp.adminName || 'Assigned'}
+                        <div className="text-[10px] text-gray-500 mt-0.5 truncate">
+                          Admin: <strong className="text-gray-700">{cmp.adminName || 'Assigned'}</strong> • {cmp.contactPhone}
                         </div>
                       </td>
 
-                      {/* Documents */}
-                      <td className="py-3 px-4">
-                        {docCount > 0 ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedCompany(cmp);
-                              setShowDrawer(true);
-                            }}
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold text-[11px] transition cursor-pointer"
-                          >
-                            <FileText className="w-3.5 h-3.5" />
-                            <span>{docCount} Doc{docCount > 1 ? 's' : ''}</span>
-                          </button>
-                        ) : (
-                          <span className="text-[11px] text-gray-400 italic">No docs</span>
-                        )}
-                      </td>
-
-                      {/* Status */}
-                      <td className="py-3 px-4">
+                      {/* 5. Status */}
+                      <td className="py-3 px-3 text-center">
                         <span
-                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
                             cmp.status === 'ACTIVE'
                               ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                               : cmp.status === 'PENDING'
@@ -604,37 +563,37 @@ export const CompaniesSection: React.FC<CompaniesSectionProps> = ({
                           ) : (
                             <AlertTriangle className="w-3 h-3" />
                           )}
-                          {cmp.status}
+                          <span>{cmp.status}</span>
                         </span>
                       </td>
 
-                      {/* Actions */}
-                      <td className="py-3 px-4 text-right">
-                        <div className="inline-flex items-center gap-1.5 justify-end">
-                          {/* View Full Details */}
+                      {/* 6. Actions (All 4 Buttons Cleanly Visible with Tooltips) */}
+                      <td className="py-3 px-3 text-right">
+                        <div className="inline-flex items-center justify-end gap-1">
+                          {/* View Button */}
                           <button
                             type="button"
                             onClick={() => {
                               setSelectedCompany(cmp);
                               setShowDrawer(true);
                             }}
-                            className="p-1.5 rounded-lg border border-[#E6F1F5] hover:bg-[#F1F9FC] text-gray-600 hover:text-[#673AB7] transition cursor-pointer"
-                            title="View Full Details"
+                            className="p-1.5 rounded-lg border border-purple-200 bg-purple-50 hover:bg-purple-100 text-[#673AB7] transition cursor-pointer shadow-2xs"
+                            title="View Details & Documents"
                           >
                             <Eye className="w-3.5 h-3.5" />
                           </button>
 
-                          {/* Edit Details */}
+                          {/* Edit Button */}
                           <button
                             type="button"
                             onClick={() => openEditModal(cmp)}
-                            className="p-1.5 rounded-lg border border-[#E6F1F5] hover:bg-[#F1F9FC] text-gray-600 hover:text-[#673AB7] transition cursor-pointer"
+                            className="p-1.5 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 transition cursor-pointer shadow-2xs"
                             title="Edit Details & Credentials"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
 
-                          {/* Toggle Status */}
+                          {/* Status Toggle Button */}
                           <button
                             type="button"
                             onClick={() => {
@@ -648,7 +607,7 @@ export const CompaniesSection: React.FC<CompaniesSectionProps> = ({
                                 ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
                                 : 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100'
                             }`}
-                            title={isSuspendedOrInactive ? 'Activate Company' : 'Deactivate / Suspend'}
+                            title={isSuspendedOrInactive ? 'Activate Company' : 'Suspend / Deactivate Company'}
                           >
                             {isSuspendedOrInactive ? (
                               <Unlock className="w-3.5 h-3.5" />
@@ -657,15 +616,15 @@ export const CompaniesSection: React.FC<CompaniesSectionProps> = ({
                             )}
                           </button>
 
-                          {/* Delete */}
+                          {/* Delete Button */}
                           <button
                             type="button"
                             onClick={() => {
                               setCompanyToDelete(cmp);
                               setShowDeleteModal(true);
                             }}
-                            className="p-1.5 rounded-lg border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition cursor-pointer"
-                            title="Delete Company"
+                            className="p-1.5 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-red-600 transition cursor-pointer shadow-2xs"
+                            title="Delete Company Permanently"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>

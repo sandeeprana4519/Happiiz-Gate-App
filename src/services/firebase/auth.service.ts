@@ -408,6 +408,35 @@ export async function findRegisteredUserByEmail(email: string): Promise<UserProf
       const found = accounts.find((a) => a.email && a.email.toLowerCase() === targetEmail);
       if (found) return found;
     }
+
+    const saUsersRaw = localStorage.getItem('happiiz_sa_users');
+    if (saUsersRaw) {
+      const saUsers: UserProfile[] = JSON.parse(saUsersRaw);
+      const found = saUsers.find((u) => u.email && u.email.toLowerCase() === targetEmail);
+      if (found) return found;
+    }
+
+    const saPartnersRaw = localStorage.getItem('happiiz_sa_partners');
+    if (saPartnersRaw) {
+      const saPartners: any[] = JSON.parse(saPartnersRaw);
+      const p = saPartners.find((part) => part.email && part.email.toLowerCase() === targetEmail);
+      if (p) {
+        return {
+          uid: p.uid || p.id,
+          fullName: p.name || p.businessName || 'Service Partner',
+          email: p.email,
+          phoneNumber: p.phone || p.contactNumber,
+          accountStatus: p.verificationStatus || (p.status === 'active' ? 'ACTIVE' : 'PENDING'),
+          primaryRole: 'SERVICE_PARTNER',
+          role: 'SERVICE_PARTNER',
+          partnerCompany: p.businessName || p.name,
+          societyId: p.assignedSocietyId,
+          societyName: p.assignedSocietyName,
+          onboardingCompleted: true,
+        } as UserProfile;
+      }
+    }
+
     const demoSession = localStorage.getItem('happiiz_gate_demo_session');
     if (demoSession) {
       const parsed: UserProfile = JSON.parse(demoSession);
@@ -616,6 +645,38 @@ export async function signInWithEmail(
     throw new Error(
       'Account Suspended: Your account is temporarily suspended. Please contact your administrator.'
     );
+  }
+
+  // 4b. Strict Service Partner Verification Status Enforcement
+  const resolvedPartnerRole = user.primaryRole || (user.isSuperAdmin ? 'SUPER_ADMIN' : 'RESIDENT');
+  if (resolvedPartnerRole === 'SERVICE_PARTNER') {
+    let pStatus = String(user.accountStatus || '').toUpperCase();
+    try {
+      const saPartnersRaw = localStorage.getItem('happiiz_sa_partners');
+      if (saPartnersRaw) {
+        const partners: any[] = JSON.parse(saPartnersRaw);
+        const match = partners.find(
+          (p) =>
+            p.uid === user.uid ||
+            (p.email && p.email.toLowerCase() === trimmedEmail)
+        );
+        if (match) {
+          const raw = match.verificationStatus || (match.status === 'active' ? 'ACTIVE' : (match.status === 'rejected' ? 'REJECTED' : 'PENDING'));
+          pStatus = String(raw || '').toUpperCase();
+        }
+      }
+    } catch (_) {}
+
+    if (pStatus === 'PENDING') {
+      throw new Error(
+        'Application Under Review: Your profile and documents are pending verification by Super Admin. You will receive login access once approved.'
+      );
+    }
+    if (pStatus === 'REJECTED') {
+      throw new Error(
+        'Application Rejected: Your verification was declined. Please contact support or resubmit your documents.'
+      );
+    }
   }
 
   // 5. Check password validation

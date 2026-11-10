@@ -36,6 +36,10 @@ export interface Society {
   adminLoginEmail?: string;
   adminPassword?: string;
   documents?: EntityDocument[];
+  pendingDues?: number;
+  duesDueDate?: string;
+  duesInvoiceNumber?: string;
+  duesStatus?: 'PAID' | 'PENDING' | 'OVERDUE';
   status: 'ACTIVE' | 'INACTIVE' | 'PENDING_VERIFICATION' | 'SUSPENDED';
   createdAt?: string;
 }

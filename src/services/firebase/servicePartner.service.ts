@@ -375,6 +375,24 @@ export const servicePartnerService = {
           setStored(resJobsKey, syncJobs);
         } catch (_) {}
 
+        // Cross-sync to Marketplace Bookings store
+        try {
+          const mpKey = 'hpz_marketplace_bookings';
+          const mpJobs = getStored<any[]>(mpKey, []);
+          const syncMp = mpJobs.map((j) =>
+            j.id === b.id || j.bookingCode === b.bookingCode
+              ? {
+                  ...j,
+                  status: 'ACCEPTED',
+                  assignedTechnicianName: selectedTech?.fullName || 'Suresh Kumar',
+                  assignedTechnicianPhone: selectedTech?.phoneNumber || '+91 98330 44109',
+                  gatePassId,
+                }
+              : j
+          );
+          setStored(mpKey, syncMp);
+        } catch (_) {}
+
         // Notify Resident
         notificationEngine.dispatchNotification({
           recipientUid: b.residentUid || 'usr_resident_04',
@@ -558,6 +576,29 @@ export const servicePartnerService = {
               : j
           );
           setStored(resJobsKey, syncJobs);
+        } catch (_) {}
+
+        // Cross-sync to Marketplace Bookings store
+        try {
+          const mpKey = 'hpz_marketplace_bookings';
+          const mpJobs = getStored<any[]>(mpKey, []);
+          const syncMp = mpJobs.map((j) =>
+            j.id === b.id || j.bookingCode === b.bookingCode
+              ? {
+                  ...j,
+                  status: 'COMPLETED',
+                  totalAmount: totalCost,
+                  commissionAmount: platformFee,
+                  partnerEarnings: netPayout,
+                  paymentStatus: 'PAID',
+                  paymentMethod: details.paymentMethod || 'UPI',
+                  transactionId: txnId,
+                  completionNotes: details.completionNotes,
+                  completedAt: now,
+                }
+              : j
+          );
+          setStored(mpKey, syncMp);
         } catch (_) {}
 
         // Create resident invoice record

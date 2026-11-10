@@ -29,6 +29,7 @@ import {
   Sliders,
   Activity,
   UserPlus,
+  Layers,
 } from 'lucide-react';
 
 export type SuperAdminTab =
@@ -38,7 +39,9 @@ export type SuperAdminTab =
   | 'onboarding'
   | 'subscriptions'
   | 'finance'
+  | 'marketplace-services'
   | 'partners'
+  | 'partner-kyc'
   | 'users'
   | 'roles'
   | 'emergency'
@@ -79,7 +82,16 @@ export const SuperAdminSidebar: React.FC<SuperAdminSidebarProps> = ({
     { id: 'companies', label: 'Companies', icon: Briefcase, category: 'Ecosystem' },
     { id: 'subscriptions', label: 'Subscriptions', icon: CreditCard, category: 'Billing' },
     { id: 'finance', label: 'Billing & Revenue', icon: DollarSign, category: 'Billing' },
-    { id: 'partners', label: 'Service Partners', icon: Wrench, category: 'Marketplace' },
+    { id: 'marketplace-services', label: 'Service Catalog', icon: Layers, category: 'Marketplace' },
+    { id: 'partners', label: 'Our Partners', icon: Wrench, category: 'Marketplace' },
+    {
+      id: 'partner-kyc',
+      label: 'Add New Partner',
+      icon: ShieldCheck,
+      badge: pendingApprovalsCount,
+      badgeColor: 'bg-amber-500 text-white',
+      category: 'Marketplace',
+    },
     { id: 'users', label: 'Global Users', icon: Users, category: 'Directory' },
     { id: 'roles', label: 'Roles & Permissions', icon: KeyRound, category: 'Security' },
     {
