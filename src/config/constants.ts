@@ -26,6 +26,21 @@ export const USER_ROLES: Record<UserRole, RoleConfig> = {
       'Enterprise Billing & Invoicing',
     ],
   },
+  PLATFORM_STAFF: {
+    id: 'PLATFORM_STAFF',
+    label: 'Platform Staff',
+    title: 'Staff Operations Portal',
+    description: 'Permission-scoped corporate portal for operations, finance, support & partner verification teams.',
+    badgeColor: 'bg-purple-500/15 text-purple-600 border-purple-500/30',
+    defaultPath: '/dashboard/platform-staff',
+    iconName: 'UsersRound',
+    capabilities: [
+      'Assigned Role & Permissions Overview',
+      'Super Admin Authorized Modules Only',
+      'Departmental Operations & Support',
+      'Audit-Tracked Actions',
+    ],
+  },
   SOCIETY_ADMIN: {
     id: 'SOCIETY_ADMIN',
     label: 'Society Admin',
@@ -39,6 +54,21 @@ export const USER_ROLES: Record<UserRole, RoleConfig> = {
       'Security Guards & Roster Allocation',
       'Society Maintenance & Notice Board',
       'Clubhouse & Amenities Management',
+    ],
+  },
+  SOCIETY_STAFF: {
+    id: 'SOCIETY_STAFF',
+    label: 'Society Staff',
+    title: 'Society Staff Portal',
+    description: 'Society-scoped operational portal restricted strictly to modules & permissions granted by the Society Admin.',
+    badgeColor: 'bg-teal-500/15 text-teal-600 border-teal-500/30',
+    defaultPath: '/dashboard/society-staff',
+    iconName: 'UserCog',
+    capabilities: [
+      'Single-Society Isolated Workspace',
+      'Assigned Role & Permissions Only',
+      'Resident, Visitor, Helpdesk & Billing Tasks',
+      'Society-Audited Actions',
     ],
   },
   SECURITY_GUARD: {

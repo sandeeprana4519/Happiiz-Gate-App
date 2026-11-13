@@ -175,6 +175,7 @@ export interface PlatformStaffMember {
   id: string;
   uid: string;
   email: string;
+  password?: string;
   fullName: string;
   phoneNumber?: string;
   role: PlatformRole;
@@ -183,6 +184,7 @@ export interface PlatformStaffMember {
   permissions: string[];
   lastLogin?: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface ManagedCompany {

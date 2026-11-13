@@ -27,6 +27,26 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const ACTIVE_MEMBERSHIP_KEY = 'happiiz_gate_active_membership';
 const DEMO_USER_SESSION_KEY = 'happiiz_gate_demo_session';
 
+function buildMembershipsForProfile(profile: UserProfile): SocietyMembership[] {
+  const role = profile.primaryRole || 'RESIDENT';
+  if (role === 'SOCIETY_STAFF' && profile.societyId) {
+    return [
+      {
+        uid: profile.uid,
+        societyId: profile.societyId,
+        societyName: profile.societyName || 'Assigned Society',
+        societyCode: profile.societyCode || 'SOC',
+        role: 'SOCIETY_STAFF',
+        membershipStatus: profile.accountStatus === 'ACTIVE' ? 'ACTIVE' : 'SUSPENDED',
+        employmentId: profile.societyStaffId,
+        joinedAt: profile.createdAt || new Date().toISOString(),
+        approvedBy: 'SOCIETY_ADMIN',
+      },
+    ];
+  }
+  return profile.onboardingCompleted ? (MOCK_MEMBERSHIPS[role] || []) : [];
+}
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -108,8 +128,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (savedDemo) {
           const parsed = JSON.parse(savedDemo) as UserProfile;
           setUser(parsed);
-          const role = parsed.primaryRole || 'RESIDENT';
-          const sampleMems = MOCK_MEMBERSHIPS[role] || [];
+          const sampleMems = buildMembershipsForProfile(parsed);
           setMemberships(sampleMems);
           setActiveMembershipState(sampleMems[0] || null);
         }
@@ -132,8 +151,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (savedDemo) {
             const parsed = JSON.parse(savedDemo) as UserProfile;
             setUser(parsed);
-            const role = parsed.primaryRole || 'RESIDENT';
-            const sampleMems = MOCK_MEMBERSHIPS[role] || [];
+            const sampleMems = buildMembershipsForProfile(parsed);
             setMemberships(sampleMems);
             setActiveMembershipState(sampleMems[0] || null);
             setLoading(false);
@@ -208,8 +226,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loginWithDemoSession = (profile: UserProfile) => {
     setUser(profile);
-    const role = profile.primaryRole || 'RESIDENT';
-    const sampleMems = profile.onboardingCompleted ? (MOCK_MEMBERSHIPS[role] || []) : [];
+    const sampleMems = buildMembershipsForProfile(profile);
     setMemberships(sampleMems);
     setActiveMembershipState(sampleMems[0] || null);
     try {
@@ -240,6 +257,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         displayName: user.fullName || user.displayName || 'User',
         societyName: activeMembership?.societyName || user.societyName,
         societyId: activeMembership?.societyId || user.societyId,
+        societyCode: activeMembership?.societyCode || user.societyCode,
         flatNumber: activeMembership?.flatId || user.flatNumber,
         block: activeMembership?.wingId || user.block,
         partnerCompany: servicePartnerProfile?.businessName || user.partnerCompany,

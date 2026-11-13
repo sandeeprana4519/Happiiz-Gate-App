@@ -8,7 +8,6 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import {
   LayoutDashboard,
-  Building,
   Layers,
   Home,
   Users,
@@ -65,6 +64,15 @@ interface SocietyAdminSidebarProps {
   mobileOpen?: boolean;
   onCloseMobile?: () => void;
 }
+
+const CATEGORY_DOT_COLORS: Record<string, string> = {
+  Overview: 'bg-teal-400',
+  'Physical Structure': 'bg-sky-400',
+  'People & Households': 'bg-indigo-400',
+  'Security & Access Gates': 'bg-rose-400',
+  'Community & Facilities': 'bg-amber-400',
+  'Finance & Administration': 'bg-emerald-400',
+};
 
 export const SocietyAdminSidebar: React.FC<SocietyAdminSidebarProps> = ({
   currentTab,
@@ -158,19 +166,19 @@ export const SocietyAdminSidebar: React.FC<SocietyAdminSidebarProps> = ({
   ];
 
   const sidebarContent = (
-    <div className="flex flex-col h-full bg-[#FFFFFF] select-none w-full">
+    <div className="flex flex-col h-full bg-gradient-to-b from-[#0B2524] via-[#0F3331] to-[#081C1B] text-slate-100 select-none w-full">
       {/* Society Admin Identity Badge */}
-      <div className="p-4 border-b border-[#E6F1F5] bg-[#F1F9FC]/60 flex items-center justify-between">
+      <div className="p-4 border-b border-white/10 bg-white/[0.03] flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-9 h-9 rounded-xl bg-[#673AB7] text-white flex items-center justify-center font-black shadow-xs shrink-0">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-500 to-emerald-600 text-white flex items-center justify-center font-black shadow-lg shadow-teal-950/50 shrink-0">
             <Building2 className="w-5 h-5" />
           </div>
           <div className="min-w-0">
-            <h3 className="font-extrabold text-sm text-[#111111] truncate">{societyName}</h3>
-            <div className="flex items-center gap-1.5 text-[11px] text-[#A9B0B8]">
-              <span className="font-mono">{societyCode}</span>
-              <span>•</span>
-              <span className="text-[#673AB7] font-semibold">Society Admin</span>
+            <h3 className="font-extrabold text-sm text-white truncate tracking-tight">{societyName}</h3>
+            <div className="flex items-center gap-1.5 text-[11px] text-teal-200/80">
+              <span className="font-mono font-semibold">{societyCode}</span>
+              <span>·</span>
+              <span className="text-emerald-300 font-semibold">Owner Console</span>
             </div>
           </div>
         </div>
@@ -178,7 +186,7 @@ export const SocietyAdminSidebar: React.FC<SocietyAdminSidebarProps> = ({
           <button
             type="button"
             onClick={onCloseMobile}
-            className="md:hidden p-1.5 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-[#E6F1F5] cursor-pointer"
+            className="md:hidden p-1.5 rounded-lg text-teal-200 hover:text-white hover:bg-white/10 cursor-pointer"
             aria-label="Close menu"
           >
             <X className="w-5 h-5" />
@@ -188,75 +196,79 @@ export const SocietyAdminSidebar: React.FC<SocietyAdminSidebarProps> = ({
 
       {/* Nav List */}
       <div className="flex-1 overflow-y-auto p-3 space-y-4 scrollbar-thin">
-        {navSections.map((sec) => (
-          <div key={sec.category} className="space-y-1">
-            <div className="px-3 text-[10px] font-extrabold text-[#A9B0B8] uppercase tracking-wider">
-              {sec.category}
+        {navSections.map((sec) => {
+          const dotColor = CATEGORY_DOT_COLORS[sec.category] || 'bg-teal-400';
+          return (
+            <div key={sec.category} className="space-y-1">
+              <div className="px-2.5 py-1 flex items-center gap-2 text-[10px] font-bold text-teal-200/65 uppercase tracking-wider">
+                <span className={`w-1.5 h-1.5 rounded-full ${dotColor} shrink-0`} />
+                <span>{sec.category}</span>
+              </div>
+              {sec.items.map((item) => {
+                const Icon = item.icon;
+                const isActive = currentTab === item.id;
+
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => {
+                      onSelectTab(item.id);
+                      onCloseMobile?.();
+                    }}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-[13px] font-medium transition-all duration-150 cursor-pointer ${
+                      isActive
+                        ? 'bg-gradient-to-r from-teal-500 to-emerald-600 text-white font-semibold shadow-md shadow-teal-950/50'
+                        : 'text-slate-200/85 hover:bg-white/10 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <Icon
+                        className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-teal-300/75'}`}
+                      />
+                      <span className="truncate">{item.label}</span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {item.badge !== undefined && item.badge > 0 && (
+                        <span
+                          className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold tabular-nums ${
+                            item.badgeVariant === 'danger'
+                              ? 'bg-rose-500 text-white'
+                              : 'bg-amber-400 text-slate-950'
+                          }`}
+                        >
+                          {item.badge}
+                        </span>
+                      )}
+                      {isActive && <ChevronRight className="w-3.5 h-3.5 text-white/90 shrink-0" />}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
-            {sec.items.map((item) => {
-              const Icon = item.icon;
-              const isActive = currentTab === item.id;
-
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => {
-                    onSelectTab(item.id);
-                    onCloseMobile?.();
-                  }}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                    isActive
-                      ? 'bg-[#673AB7] text-white shadow-xs'
-                      : 'text-[#111111] hover:bg-[#F1F9FC] hover:text-[#673AB7]'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <Icon
-                      className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-[#A9B0B8]'}`}
-                    />
-                    <span className="truncate">{item.label}</span>
-                  </div>
-
-                  <div className="flex items-center gap-1.5">
-                    {item.badge !== undefined && item.badge > 0 && (
-                      <span
-                        className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                          item.badgeVariant === 'danger'
-                            ? 'bg-red-500 text-white animate-pulse'
-                            : 'bg-amber-500 text-white'
-                        }`}
-                      >
-                        {item.badge}
-                      </span>
-                    )}
-                    {isActive && <ChevronRight className="w-3.5 h-3.5 text-white/80 shrink-0" />}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        ))}
+          );
+        })}
       </div>
 
-      {/* Sign Out / Logout Option */}
-      <div className="p-3 border-t border-[#E6F1F5] bg-white">
+      {/* Sign Out Option */}
+      <div className="p-3 border-t border-white/10 bg-black/15">
         <button
           type="button"
           onClick={handleLogout}
-          className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 transition-all cursor-pointer group"
+          className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-rose-300 hover:bg-rose-500/15 hover:text-rose-200 border border-rose-400/20 transition-all cursor-pointer group"
         >
           <div className="flex items-center gap-2.5">
-            <LogOut className="w-4 h-4 text-red-500 group-hover:translate-x-0.5 transition-transform" />
+            <LogOut className="w-4 h-4 text-rose-400 group-hover:translate-x-0.5 transition-transform" />
             <span>Sign Out (लॉगआउट)</span>
           </div>
         </button>
       </div>
 
       {/* Footer Info */}
-      <div className="p-2.5 border-t border-[#E6F1F5] bg-[#F1F9FC]/40 text-[10px] text-[#A9B0B8] flex items-center justify-between font-mono">
-        <span>Gated Security Suite</span>
-        <span className="text-emerald-600 font-semibold">Active Enclave</span>
+      <div className="p-3 border-t border-white/10 bg-black/25 text-[11px] text-teal-200/75 flex items-center justify-between">
+        <span className="font-medium">Society Command</span>
+        <span className="text-emerald-300 font-semibold">Active Enclave</span>
       </div>
     </div>
   );
@@ -264,7 +276,7 @@ export const SocietyAdminSidebar: React.FC<SocietyAdminSidebarProps> = ({
   return (
     <>
       {/* Desktop Sticky Sidebar */}
-      <aside className="hidden md:flex w-64 shrink-0 bg-[#FFFFFF] border-r border-[#E6F1F5] flex-col sticky top-0 h-screen select-none z-20">
+      <aside className="hidden md:flex w-64 xl:w-72 shrink-0 border-r border-white/10 flex-col sticky top-0 h-screen select-none z-20">
         {sidebarContent}
       </aside>
 
@@ -272,10 +284,10 @@ export const SocietyAdminSidebar: React.FC<SocietyAdminSidebarProps> = ({
       {mobileOpen && (
         <div className="fixed inset-0 z-50 md:hidden flex">
           <div
-            className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity"
+            className="fixed inset-0 bg-black/50 backdrop-blur-xs transition-opacity"
             onClick={onCloseMobile}
           />
-          <aside className="relative flex flex-col w-72 max-w-[85vw] h-full shadow-2xl z-10 bg-white">
+          <aside className="relative flex flex-col w-72 max-w-[85vw] h-full shadow-2xl z-10 bg-[#0B2524]">
             {sidebarContent}
           </aside>
         </div>

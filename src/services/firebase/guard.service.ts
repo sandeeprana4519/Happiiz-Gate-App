@@ -282,6 +282,75 @@ const DEFAULT_DIRECTORY: GuardResidentDirectoryItem[] = [
 // In-memory rate limiter for gate OTP brute-force prevention
 const otpAttemptsMap: Record<string, { attempts: number; blockedUntil: number }> = {};
 
+function findHelperPassMatch(societyId: string, token: string): any | null {
+  const clean = token.trim();
+  if (!clean) return null;
+  const upper = clean.toUpperCase();
+
+  const matches = (h: any): boolean => {
+    const pass = String(h.passCode || '').trim();
+    const hId = String(h.helperId || '').trim().toUpperCase();
+    const gpNo = String(h.gatePassNumber || '').trim().toUpperCase();
+    const rawId = String(h.id || '').trim().toUpperCase();
+    return (
+      pass === clean ||
+      (pass.length === 4 && clean.startsWith(pass)) ||
+      (hId && hId === upper) ||
+      (gpNo && gpNo === upper) ||
+      rawId === upper
+    );
+  };
+
+  const primaryList = getStored<any[]>('hpz_soc_hlp_' + societyId, []);
+  const primaryHit = primaryList.find(matches);
+  if (primaryHit) return primaryHit;
+
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('hpz_soc_hlp_')) {
+        const list = getStored<any[]>(k, []);
+        const hit = list.find(matches);
+        if (hit) return hit;
+      }
+    }
+  } catch (_) {}
+
+  return null;
+}
+
+function buildGuardVisitorFromHelper(helper: any, fallbackSocietyId: string): GuardVisitor {
+  const socLabel = helper.societyName || 'Emerald Heights Luxury Enclave';
+  const bldLabel = helper.buildingName ? `${socLabel} • ${helper.buildingName}` : socLabel;
+  return {
+    id: `hlp_pass_${helper.id}`,
+    societyId: helper.societyId || fallbackSocietyId,
+    gateId: 'gate_1',
+    gateName: 'Gate #1 (Main)',
+    guardUid: 'guard_1',
+    guardName: 'Gate Sentinel',
+    category: 'Service',
+    status: 'APPROVED',
+    visitorName: `${helper.name} (${helper.role})`,
+    visitorPhone: helper.phone,
+    building: bldLabel,
+    flatNumber: helper.flatNumber,
+    passCode: helper.passCode,
+    residentName: `Staff ID: ${helper.helperId || helper.id}`,
+    serviceCompany: `Domestic Helper / Staff • ${helper.role}`,
+    purpose: `Society: ${socLabel} | Flat: ${helper.flatNumber} | Shift: ${helper.workingHours || 'Authorized'}`,
+    isPreApproved: true,
+    approvalHistory: [
+      {
+        timestamp: helper.createdAt || new Date().toISOString(),
+        action: 'APPROVED',
+        actor: 'Society Admin Domestic Staff Gate Pass',
+      },
+    ],
+    createdAt: helper.createdAt || new Date().toISOString(),
+  };
+}
+
 export const guardService = {
   // 1. Guard Profile & Session Validation
   getGuardSession(user: any): GuardProfileInfo {
@@ -537,27 +606,64 @@ export const guardService = {
     return updatedItem;
   },
 
-  // 6. Grant Entry for Approved Visitor
+  // 6. Grant Entry for Approved Visitor (or Domestic Helper Gate Pass)
   async grantVisitorEntry(societyId: string, visitorId: string, guardName: string): Promise<boolean> {
     const visitors = await this.getAllVisitors(societyId);
     const now = new Date().toISOString();
-    let targetVisitor: GuardVisitor | undefined;
+    let targetVisitor: GuardVisitor | undefined = visitors.find(v => v.id === visitorId);
 
-    const updated = visitors.map(v => {
-      if (v.id === visitorId) {
-        targetVisitor = v;
-        return {
-          ...v,
-          status: 'INSIDE' as VisitorEntryStatus,
+    let updated: GuardVisitor[];
+    if (targetVisitor) {
+      updated = visitors.map(v => {
+        if (v.id === visitorId) {
+          return {
+            ...v,
+            status: 'INSIDE' as VisitorEntryStatus,
+            entryAt: now,
+            approvalHistory: [
+              ...v.approvalHistory,
+              { timestamp: now, action: 'CHECKED_IN' as const, actor: `${guardName} (Gate Barrier Opened)` }
+            ]
+          };
+        }
+        return v;
+      });
+    } else if (visitorId.startsWith('hlp_pass_')) {
+      const rawHelperId = visitorId.replace('hlp_pass_', '');
+      const helpers = getStored<any[]>('hpz_soc_hlp_' + societyId, []);
+      const foundHelper = helpers.find(h => h.id === rawHelperId);
+      if (foundHelper) {
+        targetVisitor = {
+          id: `vis_hlp_${Date.now()}`,
+          societyId,
+          gateId: 'gate_1',
+          gateName: 'Gate #1 (Main)',
+          guardUid: auth?.currentUser?.uid || 'guard_1',
+          guardName,
+          category: 'Service',
+          status: 'INSIDE',
+          visitorName: `${foundHelper.name} (${foundHelper.role})`,
+          visitorPhone: foundHelper.phone,
+          building: foundHelper.societyName || foundHelper.buildingName || 'Society Premises',
+          flatNumber: foundHelper.flatNumber,
+          passCode: foundHelper.passCode,
+          serviceCompany: `Staff ID: ${foundHelper.helperId || foundHelper.id}`,
+          purpose: `Domestic Helper Entry • ${foundHelper.workingHours || 'Authorized Shift'}`,
           entryAt: now,
+          isPreApproved: true,
           approvalHistory: [
-            ...v.approvalHistory,
-            { timestamp: now, action: 'CHECKED_IN' as const, actor: `${guardName} (Gate Barrier Opened)` }
-          ]
+            { timestamp: now, action: 'APPROVED', actor: 'Society Admin Gate Pass' },
+            { timestamp: now, action: 'CHECKED_IN', actor: `${guardName} (Gate Pass Verified)` }
+          ],
+          createdAt: now,
         };
+        updated = [targetVisitor, ...visitors];
+      } else {
+        updated = visitors;
       }
-      return v;
-    });
+    } else {
+      updated = visitors;
+    }
 
     setStored('hpz_guard_visitors_' + societyId, updated);
 
@@ -578,12 +684,17 @@ export const guardService = {
     try {
       const socKey = 'hpz_soc_visitors_' + societyId;
       const socVisitors = getStored<any[]>(socKey, []);
-      const syncSoc = socVisitors.map(s => {
-        if (s.id === visitorId || (targetVisitor && s.visitorName === targetVisitor.visitorName)) {
-          return { ...s, status: 'INSIDE', entryAt: now };
-        }
-        return s;
-      });
+      const existingInSoc = socVisitors.some(s => s.id === visitorId || (targetVisitor && s.id === targetVisitor.id));
+      const syncSoc = existingInSoc
+        ? socVisitors.map(s => {
+            if (s.id === visitorId || (targetVisitor && s.visitorName === targetVisitor.visitorName)) {
+              return { ...s, status: 'INSIDE', entryAt: now };
+            }
+            return s;
+          })
+        : targetVisitor
+        ? [targetVisitor, ...socVisitors]
+        : socVisitors;
       setStored(socKey, syncSoc);
     } catch (_) {}
 
@@ -594,16 +705,16 @@ export const guardService = {
         societyId,
         category: 'VISITOR',
         priority: 'NORMAL',
-        title: 'Visitor Entered Gate',
-        body: `${targetVisitor.visitorName} has entered through Gate A.`,
-        data: { visitorId, flatNumber: targetVisitor.flatNumber }
+        title: 'Visitor / Staff Entered Gate',
+        body: `${targetVisitor.visitorName} has entered for Flat ${targetVisitor.flatNumber} through gate.`,
+        data: { visitorId: targetVisitor.id, flatNumber: targetVisitor.flatNumber }
       });
     }
 
     // Log audit event
     await logEcosystemAuditEvent({
       action: 'VISITOR_ENTRY',
-      targetId: visitorId,
+      targetId: targetVisitor?.id || visitorId,
       targetType: 'GATE_PASS',
       societyId,
       changeSummary: `${targetVisitor?.visitorName || visitorId} marked IN by guard ${guardName}`
@@ -615,7 +726,7 @@ export const guardService = {
       societyId,
       guardName,
       'SECURITY_GUARD',
-      { visitorId, entryAt: now, guardName }
+      { visitorId: targetVisitor?.id || visitorId, entryAt: now, guardName }
     );
 
     return true;
@@ -660,7 +771,7 @@ export const guardService = {
     return true;
   },
 
-  // 8. 6-Digit Visitor OTP Verification with Brute-Force Rate Limiting
+  // 8. 6-Digit Visitor & Domestic Helper OTP Verification with Brute-Force Rate Limiting
   async verifyVisitorOtp(
     societyId: string,
     passCode: string
@@ -676,13 +787,30 @@ export const guardService = {
       };
     }
 
+    const cleanCode = passCode.trim();
     const visitors = await this.getAllVisitors(societyId);
-    const found = visitors.find(v => v.passCode === passCode.trim());
+    const found = visitors.find(v => v.passCode === cleanCode);
 
     if (found) {
-      // Reset limiter on success
       otpAttemptsMap[clientKey] = { attempts: 0, blockedUntil: 0 };
       return { success: true, visitor: found, message: 'Valid Pass Verified' };
+    }
+
+    // Also verify against Domestic Helpers & Staff passes
+    const helperMatch = findHelperPassMatch(societyId, cleanCode);
+    if (helperMatch) {
+      if (helperMatch.status === 'REVOKED') {
+        return {
+          success: false,
+          message: `Gate Pass REVOKED for ${helperMatch.name} (${helperMatch.role}) — Contact Society Admin.`
+        };
+      }
+      otpAttemptsMap[clientKey] = { attempts: 0, blockedUntil: 0 };
+      return {
+        success: true,
+        visitor: buildGuardVisitorFromHelper(helperMatch, societyId),
+        message: `Verified ${helperMatch.role} Gate Pass for Flat ${helperMatch.flatNumber}`
+      };
     }
 
     // Register failed attempt
@@ -703,18 +831,17 @@ export const guardService = {
     };
   },
 
-  // 9. Digital QR Code Token Validation
+  // 9. Digital QR Code Token Validation (Supports Visitor Passes & Domestic Helper Gate Passes)
   async verifyQrToken(
     societyId: string,
     qrPayload: string
   ): Promise<{ success: boolean; visitor?: GuardVisitor; message: string }> {
     try {
-      // Try parsing JSON payload if available
-      let tokenCode = qrPayload;
-      if (qrPayload.startsWith('{')) {
-        const parsed = JSON.parse(qrPayload);
-        tokenCode = parsed.code || parsed.passCode || parsed.id;
-        if (parsed.societyId && parsed.societyId !== societyId) {
+      let tokenCode = qrPayload.trim();
+      if (tokenCode.startsWith('{')) {
+        const parsed = JSON.parse(tokenCode);
+        tokenCode = parsed.code || parsed.passCode || parsed.helperId || parsed.gatePassNumber || parsed.id || '';
+        if (parsed.societyId && parsed.societyId !== societyId && parsed.type !== 'DOMESTIC_HELPER_PASS') {
           return { success: false, message: 'Security Mismatch: This GatePass was issued for a different society.' };
         }
       }
@@ -730,6 +857,22 @@ export const guardService = {
           return { success: false, message: 'GatePass has already been completed and checked out.' };
         }
         return { success: true, visitor: found, message: 'QR Code verified successfully.' };
+      }
+
+      // Check Domestic Helpers & Staff Gate Passes
+      const helperMatch = findHelperPassMatch(societyId, tokenCode);
+      if (helperMatch) {
+        if (helperMatch.status === 'REVOKED') {
+          return {
+            success: false,
+            message: `Domestic Helper Pass REVOKED for ${helperMatch.name} (${helperMatch.role}).`
+          };
+        }
+        return {
+          success: true,
+          visitor: buildGuardVisitorFromHelper(helperMatch, societyId),
+          message: `Verified ${helperMatch.role} Gate Pass — ${helperMatch.societyName || 'Society'} • Flat ${helperMatch.flatNumber}`
+        };
       }
 
       // Check fallback mock passes

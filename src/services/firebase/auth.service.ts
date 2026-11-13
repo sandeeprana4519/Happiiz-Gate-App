@@ -375,8 +375,9 @@ export async function findRegisteredUserByEmail(email: string): Promise<UserProf
   if (!email) return null;
   const targetEmail = email.trim().toLowerCase();
 
-  // 1. Check pre-seeded MOCK_USERS profiles
+  // 1. Check pre-seeded core MOCK_USERS profiles (excluding dynamic staff roles resolved live below)
   for (const roleKey of Object.keys(MOCK_USERS) as UserRole[]) {
+    if (roleKey === 'PLATFORM_STAFF' || roleKey === 'SOCIETY_STAFF') continue;
     const profile = MOCK_USERS[roleKey];
     if (profile.email && profile.email.toLowerCase() === targetEmail) {
       return profile;
@@ -402,6 +403,106 @@ export async function findRegisteredUserByEmail(email: string): Promise<UserProf
 
   // 2. Check local accounts store
   try {
+    // 2a. Check Platform Staff directory first so live permissions/status/role updates apply immediately
+    const saStaffRaw = localStorage.getItem('happiiz_sa_staff');
+    if (saStaffRaw) {
+      const staffList: any[] = JSON.parse(saStaffRaw);
+      const staff = staffList.find((s) => s.email && s.email.toLowerCase() === targetEmail);
+      if (staff) {
+        const isRoot = staff.role === 'SUPER_ADMIN';
+        return {
+          uid: staff.uid || staff.id,
+          fullName: staff.fullName || 'Platform Staff',
+          displayName: staff.fullName || 'Platform Staff',
+          email: staff.email.toLowerCase(),
+          phoneNumber: staff.phoneNumber || '+91 98000 00000',
+          preferredLanguage: 'en',
+          accountStatus: staff.status === 'ACTIVE' ? 'ACTIVE' : 'SUSPENDED',
+          createdAt: staff.createdAt || new Date().toISOString(),
+          updatedAt: staff.updatedAt || new Date().toISOString(),
+          lastLoginAt: staff.lastLogin || new Date().toISOString(),
+          onboardingCompleted: true,
+          isSuperAdmin: isRoot,
+          primaryRole: isRoot ? 'SUPER_ADMIN' : 'PLATFORM_STAFF',
+          role: isRoot ? 'SUPER_ADMIN' : 'PLATFORM_STAFF',
+          platformRole: staff.role,
+          platformDepartment: staff.department,
+          platformPermissions: Array.isArray(staff.permissions) ? staff.permissions : [],
+          platformStaffId: staff.id,
+        } as UserProfile;
+      }
+    }
+
+    // 2b. Check Society Staff directories across all societies so live societyId, role, permissions & status apply immediately
+    const buildSocietyStaffProfile = (staff: any, fallbackSocName?: string, fallbackSocCode?: string): UserProfile => ({
+      uid: staff.uid || `usr_soc_staff_${staff.id}`,
+      fullName: staff.fullName || 'Society Staff',
+      displayName: staff.fullName || 'Society Staff',
+      email: String(staff.email || targetEmail).toLowerCase(),
+      phoneNumber: staff.phone || '+91 98000 00000',
+      preferredLanguage: 'en',
+      accountStatus: staff.status === 'ACTIVE' ? 'ACTIVE' : 'SUSPENDED',
+      createdAt: staff.joinedAt || new Date().toISOString(),
+      updatedAt: staff.updatedAt || new Date().toISOString(),
+      lastLoginAt: staff.lastLoginAt || new Date().toISOString(),
+      onboardingCompleted: true,
+      isSuperAdmin: false,
+      primaryRole: 'SOCIETY_STAFF',
+      role: 'SOCIETY_STAFF',
+      societyId: staff.societyId,
+      societyName: staff.societyName || fallbackSocName || 'Assigned Society',
+      societyCode: staff.societyCode || fallbackSocCode || 'SOC',
+      societyStaffId: staff.id,
+      societyStaffRole: staff.role || 'Society Staff',
+      societyDepartment: staff.assignedArea || 'Estate Office',
+      societyPermissions: Array.isArray(staff.permissions) ? staff.permissions : [],
+    });
+
+    // Check auth index first for direct society lookup
+    const socIndexRaw = localStorage.getItem('hpz_soc_staff_accounts');
+    if (socIndexRaw) {
+      const idxEntries: any[] = JSON.parse(socIndexRaw);
+      const idxMatch = idxEntries.find(
+        (e) => e.email && String(e.email).toLowerCase() === targetEmail
+      );
+      if (idxMatch?.societyId) {
+        const socStaffRaw = localStorage.getItem(`hpz_soc_staff_${idxMatch.societyId}`);
+        if (socStaffRaw) {
+          const socStaffList: any[] = JSON.parse(socStaffRaw);
+          const staffMatch = socStaffList.find(
+            (s) =>
+              !s.isOwner &&
+              s.role !== 'Society Admin' &&
+              ((s.email && String(s.email).toLowerCase() === targetEmail) || s.id === idxMatch.id)
+          );
+          if (staffMatch) {
+            return buildSocietyStaffProfile(staffMatch, idxMatch.societyName, idxMatch.societyCode);
+          }
+        }
+      }
+    }
+
+    // Scan hpz_soc_staff_* stores in case index wasn't built yet
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('hpz_soc_staff_') && key !== 'hpz_soc_staff_accounts') {
+        const rawSoc = localStorage.getItem(key);
+        if (!rawSoc) continue;
+        const socStaffList: any[] = JSON.parse(rawSoc);
+        if (!Array.isArray(socStaffList)) continue;
+        const staffMatch = socStaffList.find(
+          (s) =>
+            !s.isOwner &&
+            s.role !== 'Society Admin' &&
+            s.email &&
+            String(s.email).toLowerCase() === targetEmail
+        );
+        if (staffMatch) {
+          return buildSocietyStaffProfile(staffMatch);
+        }
+      }
+    }
+
     const raw = localStorage.getItem('happiiz_user_accounts');
     if (raw) {
       const accounts: UserProfile[] = JSON.parse(raw);
@@ -443,6 +544,14 @@ export async function findRegisteredUserByEmail(email: string): Promise<UserProf
       if (parsed.email && parsed.email.toLowerCase() === targetEmail) {
         return parsed;
       }
+    }
+
+    // Fallback to pre-seeded staff mock profiles if not yet customized in localStorage
+    if (MOCK_USERS.PLATFORM_STAFF?.email?.toLowerCase() === targetEmail) {
+      return MOCK_USERS.PLATFORM_STAFF;
+    }
+    if (MOCK_USERS.SOCIETY_STAFF?.email?.toLowerCase() === targetEmail) {
+      return MOCK_USERS.SOCIETY_STAFF;
     }
   } catch (e) {
     console.warn('[AuthService] Local accounts lookup error:', e);
@@ -681,11 +790,47 @@ export async function signInWithEmail(
 
   // 5. Check password validation
   const storedCustomPassword = getUserStoredPassword(user.uid);
-  let isPasswordValid = false;
+  let staffRecordPassword: string | null = null;
+  if (user.primaryRole === 'PLATFORM_STAFF') {
+    try {
+      const saStaffRaw = localStorage.getItem('happiiz_sa_staff');
+      if (saStaffRaw) {
+        const staffList: any[] = JSON.parse(saStaffRaw);
+        const match = staffList.find(
+          (s) => s.uid === user.uid || (s.email && s.email.toLowerCase() === trimmedEmail)
+        );
+        if (match?.password) {
+          staffRecordPassword = match.password;
+        }
+      }
+    } catch (_) {}
+  } else if (user.primaryRole === 'SOCIETY_STAFF') {
+    try {
+      const socKey = user.societyId ? `hpz_soc_staff_${user.societyId}` : null;
+      if (socKey) {
+        const socRaw = localStorage.getItem(socKey);
+        if (socRaw) {
+          const staffList: any[] = JSON.parse(socRaw);
+          const match = staffList.find(
+            (s) =>
+              s.uid === user.uid ||
+              s.id === user.societyStaffId ||
+              (s.email && s.email.toLowerCase() === trimmedEmail)
+          );
+          if (match?.password) {
+            staffRecordPassword = match.password;
+          }
+        }
+      }
+    } catch (_) {}
+  }
 
-  if (storedCustomPassword) {
-    // If user has reset their password, strictly require the newly set password
-    isPasswordValid = password === storedCustomPassword;
+  let isPasswordValid = false;
+  const effectiveStaffOrCustomPassword = storedCustomPassword || staffRecordPassword;
+
+  if (effectiveStaffOrCustomPassword) {
+    // Strictly enforce the staff password set by Super Admin or user's custom password
+    isPasswordValid = password === effectiveStaffOrCustomPassword;
   } else {
     // Default valid passwords for pre-configured accounts
     const acceptedDefaultPasswords = [

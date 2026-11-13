@@ -56,7 +56,7 @@ export default defineConfig(() => {
           ],
         },
         workbox: {
-          maximumFileSizeToCacheInBytes: 6 * 1024 * 1024, // 6 MB limit to support unminified debug and full PWA bundles
+          maximumFileSizeToCacheInBytes: 10 * 1024 * 1024, // 10 MB limit to support unminified debug and full PWA bundles
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
           navigateFallback: '/index.html',
           runtimeCaching: [

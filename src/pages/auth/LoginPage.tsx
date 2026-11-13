@@ -55,6 +55,20 @@ export const LoginPage: React.FC = () => {
   const queryParams = new URLSearchParams(location.search);
   const targetRole = queryParams.get('role');
 
+  // Portal Criteria Selector ('ALL' = Unified Auto-Role, 'SOCIETY_STAFF' = Society Staff Portal, 'PLATFORM_STAFF' = Platform Staff Portal)
+  const [portalMode, setPortalMode] = useState<'ALL' | 'SOCIETY_STAFF' | 'PLATFORM_STAFF'>(
+    targetRole === 'SOCIETY_STAFF'
+      ? 'SOCIETY_STAFF'
+      : targetRole === 'PLATFORM_STAFF'
+      ? 'PLATFORM_STAFF'
+      : 'ALL'
+  );
+
+  useEffect(() => {
+    if (targetRole === 'SOCIETY_STAFF') setPortalMode('SOCIETY_STAFF');
+    else if (targetRole === 'PLATFORM_STAFF') setPortalMode('PLATFORM_STAFF');
+  }, [targetRole]);
+
   // Multi-step View State
   const [view, setView] = useState<AuthView>('LOGIN');
 
@@ -148,10 +162,16 @@ export const LoginPage: React.FC = () => {
     // Role-based target routes
     switch (role) {
       case 'SUPER_ADMIN':
-        navigate('/dashboard/super-admin', { replace: true });
+        navigate('/admin/dashboard', { replace: true });
+        break;
+      case 'PLATFORM_STAFF':
+        navigate('/dashboard/platform-staff', { replace: true });
         break;
       case 'SOCIETY_ADMIN':
         navigate('/dashboard/society-admin', { replace: true });
+        break;
+      case 'SOCIETY_STAFF':
+        navigate('/dashboard/society-staff', { replace: true });
         break;
       case 'SECURITY_GUARD':
         navigate('/dashboard/guard', { replace: true });
@@ -186,6 +206,20 @@ export const LoginPage: React.FC = () => {
     setLoading(true);
     try {
       const { user, role } = await signInWithEmail(email, password);
+
+      if (portalMode === 'SOCIETY_STAFF' && role !== 'SOCIETY_STAFF') {
+        setError(
+          'Portal Mismatch: This account is not a Society Staff account. Switch to "Unified Login" or "Platform Staff" above to access your portal.'
+        );
+        return;
+      }
+      if (portalMode === 'PLATFORM_STAFF' && role !== 'PLATFORM_STAFF') {
+        setError(
+          'Portal Mismatch: This account is not a Platform Staff account. Switch to "Unified Login" or "Society Staff" above to access your portal.'
+        );
+        return;
+      }
+
       setSuccessNotice(`Authentication successful. Redirecting to your dashboard...`);
       setTimeout(() => {
         handleRedirectByRole(user, role);
@@ -390,8 +424,8 @@ export const LoginPage: React.FC = () => {
 
       {/* Main Authentication Card */}
       <div className="w-full rounded-2xl bg-[#FFFFFF] border border-[#E6F1F5] shadow-[0_4px_24px_rgba(0,0,0,0.06)] p-6 sm:p-8">
-        {/* Portal-Specific Target Role Header (if navigated with ?role=) */}
-        {targetRole === 'SOCIETY_ADMIN' && view === 'LOGIN' && (
+        {/* Portal-Specific Target Role Header */}
+        {(targetRole === 'SOCIETY_ADMIN' || portalMode === 'ALL') && targetRole === 'SOCIETY_ADMIN' && view === 'LOGIN' && (
           <div className="mb-4 p-3 rounded-xl bg-purple-50 border border-purple-200 text-xs text-[#673AB7] font-semibold flex items-center gap-2">
             <Building2 className="w-4 h-4 text-[#673AB7] shrink-0" />
             <span>Society Admin Portal Authentication</span>
@@ -401,6 +435,80 @@ export const LoginPage: React.FC = () => {
           <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 font-semibold flex items-center gap-2">
             <ShieldAlert className="w-4 h-4 text-red-600 shrink-0" />
             <span>Platform Super Admin Master Control Authorization</span>
+          </div>
+        )}
+
+        {/* Dedicated Staff Login Criteria Selector */}
+        {view === 'LOGIN' && targetRole !== 'SUPER_ADMIN' && (
+          <div className="mb-4 space-y-2.5">
+            <div className="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-[#F1F9FC] border border-[#E6F1F5]">
+              <button
+                type="button"
+                onClick={() => {
+                  setPortalMode('ALL');
+                  setError(null);
+                }}
+                className={`px-2 py-1.5 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                  portalMode === 'ALL'
+                    ? 'bg-white text-[#111111] shadow-xs border border-[#E6F1F5]'
+                    : 'text-[#64748B] hover:text-[#111111]'
+                }`}
+              >
+                Unified Login
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setPortalMode('SOCIETY_STAFF');
+                  setError(null);
+                }}
+                className={`px-2 py-1.5 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                  portalMode === 'SOCIETY_STAFF'
+                    ? 'bg-teal-600 text-white shadow-xs'
+                    : 'text-[#64748B] hover:text-teal-700'
+                }`}
+              >
+                Society Staff
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setPortalMode('PLATFORM_STAFF');
+                  setError(null);
+                }}
+                className={`px-2 py-1.5 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                  portalMode === 'PLATFORM_STAFF'
+                    ? 'bg-[#673AB7] text-white shadow-xs'
+                    : 'text-[#64748B] hover:text-[#673AB7]'
+                }`}
+              >
+                Platform Staff
+              </button>
+            </div>
+
+            {portalMode === 'SOCIETY_STAFF' && (
+              <div className="p-3 rounded-xl bg-teal-50 border border-teal-200 text-xs text-teal-900 font-medium flex items-start gap-2">
+                <ShieldCheck className="w-4 h-4 text-teal-700 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-extrabold block">Society Staff Portal Login</span>
+                  <span className="text-[11px] text-teal-700">
+                    Sign in with the Email ID & Password issued by your Society Admin. Only your assigned society and authorized modules will open.
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {portalMode === 'PLATFORM_STAFF' && (
+              <div className="p-3 rounded-xl bg-purple-50 border border-purple-200 text-xs text-purple-900 font-medium flex items-start gap-2">
+                <ShieldCheck className="w-4 h-4 text-[#673AB7] shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-extrabold block">Platform Staff Portal Login</span>
+                  <span className="text-[11px] text-[#673AB7]">
+                    Sign in with Super Admin issued credentials to open your department workspace.
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -626,6 +734,20 @@ export const LoginPage: React.FC = () => {
                   className="px-2.5 py-1 rounded-lg bg-white border border-[#E6F1F5] text-[11px] font-semibold text-indigo-700 hover:border-indigo-500 hover:bg-indigo-50/50 transition-colors"
                 >
                   🏢 Society Admin
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleFillCredentials('manager@emeraldheights.org')}
+                  className="px-2.5 py-1 rounded-lg bg-white border border-[#E6F1F5] text-[11px] font-semibold text-teal-700 hover:border-teal-500 hover:bg-teal-50/50 transition-colors"
+                >
+                  🧑‍💼 Society Staff
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleFillCredentials('priya.iyer@happiiz.com')}
+                  className="px-2.5 py-1 rounded-lg bg-white border border-[#E6F1F5] text-[11px] font-semibold text-[#673AB7] hover:border-[#673AB7] hover:bg-purple-50/50 transition-colors"
+                >
+                  💼 Platform Staff
                 </button>
                 <button
                   type="button"

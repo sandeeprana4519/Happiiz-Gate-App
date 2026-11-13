@@ -38,10 +38,16 @@ import {
   SocietyAdminRole,
 } from '../../types/societyAdmin';
 import { GatePass } from '../../types/society';
-import { MOCK_GATE_PASSES, MOCK_ALERTS, MOCK_FACILITIES } from '../mock/mockData';
+import { UserProfile } from '../../types/auth';
+import { MOCK_GATE_PASSES, MOCK_ALERTS, MOCK_FACILITIES, MOCK_USERS } from '../mock/mockData';
 import { syncBus } from './sync.service';
 import { notificationEngine } from './notification.service';
 import { logEcosystemAuditEvent } from './audit.service';
+import { setUserStoredPassword } from './auth.service';
+import {
+  DEFAULT_SOCIETY_STAFF_PERMISSIONS,
+  SOCIETY_STAFF_PERMISSIONS,
+} from '../../components/societyAdmin/societyStaffPermissions';
 
 // Storage Helper
 function getStored<T>(key: string, fallback: T): T {
@@ -111,6 +117,7 @@ const DEFAULT_FLATS: SocietyFlat[] = [
     squareFeet: 1650,
     parkingSlotNumber: 'P-101',
     intercomNumber: '101',
+    updatedAt: '2026-02-10T09:00:00Z',
   },
   {
     id: 'flat_b_704',
@@ -128,6 +135,7 @@ const DEFAULT_FLATS: SocietyFlat[] = [
     squareFeet: 2200,
     parkingSlotNumber: 'P-704A, P-704B',
     intercomNumber: '704',
+    updatedAt: '2026-02-15T10:15:00Z',
   },
   {
     id: 'flat_a_402',
@@ -146,6 +154,7 @@ const DEFAULT_FLATS: SocietyFlat[] = [
     squareFeet: 1250,
     parkingSlotNumber: 'P-402',
     intercomNumber: '402',
+    updatedAt: '2026-03-01T11:00:00Z',
   },
   {
     id: 'flat_b_203',
@@ -161,6 +170,7 @@ const DEFAULT_FLATS: SocietyFlat[] = [
     squareFeet: 1700,
     parkingSlotNumber: 'P-203',
     intercomNumber: '203',
+    updatedAt: '2026-10-18T14:20:00Z',
   },
   {
     id: 'flat_c_501',
@@ -176,6 +186,7 @@ const DEFAULT_FLATS: SocietyFlat[] = [
     squareFeet: 1680,
     parkingSlotNumber: 'P-501',
     intercomNumber: '501',
+    updatedAt: '2026-11-04T09:30:00Z',
   },
 ];
 
@@ -273,6 +284,7 @@ const DEFAULT_HOUSEHOLD_MEMBERS: SocietyHouseholdMember[] = [
     relationship: 'Spouse',
     phone: '+91 99554 11002',
     isEmergencyContact: true,
+    createdAt: '2026-02-15T10:20:00Z',
   },
   {
     id: 'hh_2',
@@ -282,6 +294,7 @@ const DEFAULT_HOUSEHOLD_MEMBERS: SocietyHouseholdMember[] = [
     name: 'Rohan Varma',
     relationship: 'Child',
     age: 12,
+    createdAt: '2026-02-15T10:25:00Z',
   },
 ];
 
@@ -296,6 +309,7 @@ const DEFAULT_VEHICLES: SocietyVehicle[] = [
     plateNumber: 'KA-05-MM-9011',
     parkingSlot: 'P-704A',
     rfidTagId: 'RFID-EMR-0981',
+    createdAt: '2026-02-18T12:00:00Z',
   },
   {
     id: 'veh_2',
@@ -306,33 +320,68 @@ const DEFAULT_VEHICLES: SocietyVehicle[] = [
     makeModel: 'Honda City White',
     plateNumber: 'KA-01-AB-1234',
     parkingSlot: 'P-402',
+    createdAt: '2026-03-04T15:30:00Z',
   },
 ];
+
+const buildHelperQrPayload = (h: {
+  id: string;
+  helperId: string;
+  societyId: string;
+  societyName?: string;
+  flatNumber: string;
+  name: string;
+  role: string;
+  passCode: string;
+  gatePassNumber: string;
+}) =>
+  JSON.stringify({
+    type: 'DOMESTIC_HELPER_PASS',
+    id: h.id,
+    helperId: h.helperId,
+    code: h.passCode,
+    gatePassNumber: h.gatePassNumber,
+    societyId: h.societyId,
+    societyName: h.societyName || 'Residential Society',
+    flatNumber: h.flatNumber,
+    name: h.name,
+    role: h.role,
+  });
 
 const DEFAULT_DOMESTIC_HELPERS: SocietyDomesticHelper[] = [
   {
     id: 'hlp_1',
+    helperId: 'HLP-2026-4491',
     societyId: 'soc_emerald_heights',
+    societyName: 'Emerald Heights Luxury Enclave',
+    buildingName: 'Tower B',
     flatNumber: 'B-704',
     name: 'Shanti Devi',
     role: 'Cook',
     phone: '+91 98450 77122',
-    passCode: '4491',
+    passCode: '449101',
+    gatePassNumber: 'GP-HLP-449101',
     workingHours: '07:30 AM - 10:00 AM, 06:30 PM - 08:30 PM',
     policeVerificationVerified: true,
     status: 'ACTIVE',
+    createdAt: '2026-02-20T08:00:00Z',
   },
   {
     id: 'hlp_2',
+    helperId: 'HLP-2026-8821',
     societyId: 'soc_emerald_heights',
+    societyName: 'Emerald Heights Luxury Enclave',
+    buildingName: 'Tower B',
     flatNumber: 'B-704',
     name: 'Santosh Kumar',
     role: 'Driver',
     phone: '+91 97400 33881',
-    passCode: '8821',
+    passCode: '882102',
+    gatePassNumber: 'GP-HLP-882102',
     workingHours: '08:00 AM - 07:00 PM',
     policeVerificationVerified: true,
     status: 'ACTIVE',
+    createdAt: '2026-03-10T09:15:00Z',
   },
 ];
 
@@ -562,31 +611,49 @@ const DEFAULT_COMMUNITY_POSTS: SocietyCommunityPost[] = [
 const DEFAULT_STAFF: SocietyStaffMember[] = [
   {
     id: 'stf_1',
+    uid: 'usr_society_admin_02',
     societyId: 'soc_emerald_heights',
+    societyName: 'Emerald Heights Luxury Enclave',
+    societyCode: 'EMR-01',
     fullName: 'Rajesh Sharma',
     phone: '+919812345678',
     email: 'president@emeraldheights.org',
     role: 'Society Admin',
+    assignedArea: 'Society Owner & President',
+    permissions: SOCIETY_STAFF_PERMISSIONS.map((p) => p.key),
+    isOwner: true,
     status: 'ACTIVE',
     joinedAt: '2026-02-01T09:30:00Z',
   },
   {
     id: 'stf_2',
+    uid: 'usr_soc_staff_stf2',
     societyId: 'soc_emerald_heights',
+    societyName: 'Emerald Heights Luxury Enclave',
+    societyCode: 'EMR-01',
     fullName: 'Venkat Raman',
     phone: '+91 98440 22119',
+    email: 'manager@emeraldheights.org',
+    password: 'Happiiz@2026',
     role: 'Society Manager',
     assignedArea: 'Clubhouse Estate Office',
+    permissions: DEFAULT_SOCIETY_STAFF_PERMISSIONS['Society Manager'],
     status: 'ACTIVE',
     joinedAt: '2026-02-15T10:00:00Z',
   },
   {
     id: 'stf_3',
+    uid: 'usr_soc_staff_stf3',
     societyId: 'soc_emerald_heights',
+    societyName: 'Emerald Heights Luxury Enclave',
+    societyCode: 'EMR-01',
     fullName: 'Bahadur Singh',
     phone: '+919700011223',
+    email: 'supervisor@emeraldheights.org',
+    password: 'Happiiz@2026',
     role: 'Security Supervisor',
     assignedArea: 'All 3 Gates',
+    permissions: DEFAULT_SOCIETY_STAFF_PERMISSIONS['Security Supervisor'],
     status: 'ACTIVE',
     joinedAt: '2026-02-10T06:00:00Z',
   },
@@ -811,7 +878,13 @@ export async function addSocietyBuilding(
 // ==========================================
 export async function getSocietyFlats(societyId: string): Promise<SocietyFlat[]> {
   const local = getStored<SocietyFlat[]>('hpz_soc_flats_' + societyId, DEFAULT_FLATS);
-  return local.filter((f) => f.societyId === societyId || !f.societyId);
+  const seedDates = new Map(DEFAULT_FLATS.map((d) => [d.id, d.updatedAt]));
+  return local
+    .filter((f) => f.societyId === societyId || !f.societyId)
+    .map((f) => ({
+      ...f,
+      updatedAt: f.updatedAt || seedDates.get(f.id) || '2026-11-01T00:00:00Z',
+    }));
 }
 
 export async function addSocietyFlat(societyId: string, flat: Partial<SocietyFlat>): Promise<SocietyFlat> {
@@ -833,6 +906,7 @@ export async function addSocietyFlat(societyId: string, flat: Partial<SocietyFla
     squareFeet: flat.squareFeet || 1500,
     parkingSlotNumber: flat.parkingSlotNumber || 'P-01',
     intercomNumber: flat.intercomNumber || flat.flatNumber,
+    updatedAt: flat.updatedAt || new Date().toISOString(),
   };
 
   setStored('hpz_soc_flats_' + societyId, [...list, newFlat]);
@@ -873,7 +947,12 @@ export async function updateResidentMembershipStatus(
 // 6. HOUSEHOLD, VEHICLES & HELPERS
 // ==========================================
 export async function getSocietyHouseholdMembers(societyId: string): Promise<SocietyHouseholdMember[]> {
-  return getStored<SocietyHouseholdMember[]>('hpz_soc_hh_' + societyId, DEFAULT_HOUSEHOLD_MEMBERS);
+  const list = getStored<SocietyHouseholdMember[]>('hpz_soc_hh_' + societyId, DEFAULT_HOUSEHOLD_MEMBERS);
+  const seedDates = new Map(DEFAULT_HOUSEHOLD_MEMBERS.map((d) => [d.id, d.createdAt]));
+  return list.map((m) => ({
+    ...m,
+    createdAt: m.createdAt || seedDates.get(m.id) || '2026-11-01T00:00:00Z',
+  }));
 }
 
 export async function addHouseholdMember(
@@ -881,17 +960,45 @@ export async function addHouseholdMember(
   member: Omit<SocietyHouseholdMember, 'id' | 'societyId'>
 ): Promise<SocietyHouseholdMember> {
   const list = await getSocietyHouseholdMembers(societyId);
+  const now = new Date().toISOString();
   const newMember: SocietyHouseholdMember = {
     ...member,
     id: `hh_${Date.now()}`,
     societyId,
+    createdAt: member.createdAt || now,
+    updatedAt: now,
   };
-  setStored('hpz_soc_hh_' + societyId, [...list, newMember]);
+  setStored('hpz_soc_hh_' + societyId, [newMember, ...list]);
   return newMember;
 }
 
+export async function updateHouseholdMember(
+  societyId: string,
+  memberId: string,
+  updates: Partial<SocietyHouseholdMember>
+): Promise<boolean> {
+  const list = await getSocietyHouseholdMembers(societyId);
+  const updated = list.map((m) =>
+    m.id === memberId ? { ...m, ...updates, updatedAt: new Date().toISOString() } : m
+  );
+  setStored('hpz_soc_hh_' + societyId, updated);
+  return true;
+}
+
+export async function deleteHouseholdMember(societyId: string, memberId: string): Promise<boolean> {
+  const list = await getSocietyHouseholdMembers(societyId);
+  const filtered = list.filter((m) => m.id !== memberId);
+  setStored('hpz_soc_hh_' + societyId, filtered);
+  return true;
+}
+
 export async function getSocietyVehicles(societyId: string): Promise<SocietyVehicle[]> {
-  return getStored<SocietyVehicle[]>('hpz_soc_veh_' + societyId, DEFAULT_VEHICLES);
+  const list = getStored<SocietyVehicle[]>('hpz_soc_veh_' + societyId, DEFAULT_VEHICLES);
+  const seedDates = new Map(DEFAULT_VEHICLES.map((d) => [d.id, d.createdAt]));
+  return list.map((v) => ({
+    ...v,
+    createdAt: v.createdAt || seedDates.get(v.id) || '2026-11-01T00:00:00Z',
+  }));
 }
 
 export async function addSocietyVehicle(
@@ -899,17 +1006,78 @@ export async function addSocietyVehicle(
   veh: Omit<SocietyVehicle, 'id' | 'societyId'>
 ): Promise<SocietyVehicle> {
   const list = await getSocietyVehicles(societyId);
+  const now = new Date().toISOString();
   const newVeh: SocietyVehicle = {
     ...veh,
     id: `veh_${Date.now()}`,
     societyId,
+    createdAt: veh.createdAt || now,
+    updatedAt: now,
   };
-  setStored('hpz_soc_veh_' + societyId, [...list, newVeh]);
+  setStored('hpz_soc_veh_' + societyId, [newVeh, ...list]);
   return newVeh;
 }
 
+export async function updateSocietyVehicle(
+  societyId: string,
+  vehicleId: string,
+  updates: Partial<SocietyVehicle>
+): Promise<boolean> {
+  const list = await getSocietyVehicles(societyId);
+  const updated = list.map((v) =>
+    v.id === vehicleId ? { ...v, ...updates, updatedAt: new Date().toISOString() } : v
+  );
+  setStored('hpz_soc_veh_' + societyId, updated);
+  return true;
+}
+
+export async function deleteSocietyVehicle(societyId: string, vehicleId: string): Promise<boolean> {
+  const list = await getSocietyVehicles(societyId);
+  const filtered = list.filter((v) => v.id !== vehicleId);
+  setStored('hpz_soc_veh_' + societyId, filtered);
+  return true;
+}
+
 export async function getSocietyDomesticHelpers(societyId: string): Promise<SocietyDomesticHelper[]> {
-  return getStored<SocietyDomesticHelper[]>('hpz_soc_hlp_' + societyId, DEFAULT_DOMESTIC_HELPERS);
+  const list = getStored<SocietyDomesticHelper[]>('hpz_soc_hlp_' + societyId, DEFAULT_DOMESTIC_HELPERS);
+  const seedDates = new Map(DEFAULT_DOMESTIC_HELPERS.map((d) => [d.id, d.createdAt]));
+  return list.map((h, idx) => {
+    const rawPass = (h.passCode || '').trim();
+    const passCode =
+      rawPass.length === 6
+        ? rawPass
+        : rawPass === '4491'
+        ? '449101'
+        : rawPass === '8821'
+        ? '882102'
+        : (rawPass || `${100000 + idx * 111}`).padEnd(6, '0').slice(0, 6);
+    const helperId = h.helperId || `HLP-${new Date().getFullYear()}-${passCode.slice(0, 4)}`;
+    const gatePassNumber = h.gatePassNumber || `GP-HLP-${passCode}`;
+    const enriched: SocietyDomesticHelper = {
+      ...h,
+      helperId,
+      societyId: h.societyId || societyId,
+      passCode,
+      gatePassNumber,
+      createdAt: h.createdAt || seedDates.get(h.id) || '2026-11-01T00:00:00Z',
+    };
+    return {
+      ...enriched,
+      qrToken:
+        h.qrToken ||
+        buildHelperQrPayload({
+          id: enriched.id,
+          helperId,
+          societyId: enriched.societyId,
+          societyName: enriched.societyName,
+          flatNumber: enriched.flatNumber,
+          name: enriched.name,
+          role: enriched.role,
+          passCode,
+          gatePassNumber,
+        }),
+    };
+  });
 }
 
 export async function addDomesticHelper(
@@ -917,18 +1085,102 @@ export async function addDomesticHelper(
   helper: Omit<SocietyDomesticHelper, 'id' | 'societyId'>
 ): Promise<SocietyDomesticHelper> {
   const list = await getSocietyDomesticHelpers(societyId);
+  const now = new Date().toISOString();
+  const id = `hlp_${Date.now()}`;
+  const passCode = (helper.passCode || `${Math.floor(100000 + Math.random() * 900000)}`).slice(0, 6);
+  const helperId = helper.helperId || `HLP-${new Date().getFullYear()}-${passCode.slice(-4)}`;
+  const gatePassNumber = helper.gatePassNumber || `GP-HLP-${passCode}`;
   const newHelper: SocietyDomesticHelper = {
     ...helper,
-    id: `hlp_${Date.now()}`,
+    id,
+    helperId,
     societyId,
+    passCode,
+    gatePassNumber,
+    qrToken: buildHelperQrPayload({
+      id,
+      helperId,
+      societyId,
+      societyName: helper.societyName,
+      flatNumber: helper.flatNumber,
+      name: helper.name,
+      role: helper.role,
+      passCode,
+      gatePassNumber,
+    }),
+    createdAt: helper.createdAt || now,
+    updatedAt: now,
   };
-  setStored('hpz_soc_hlp_' + societyId, [...list, newHelper]);
+  setStored('hpz_soc_hlp_' + societyId, [newHelper, ...list]);
   return newHelper;
+}
+
+export async function updateDomesticHelper(
+  societyId: string,
+  helperIdKey: string,
+  updates: Partial<SocietyDomesticHelper>
+): Promise<boolean> {
+  const list = await getSocietyDomesticHelpers(societyId);
+  const updated = list.map((h) => {
+    if (h.id !== helperIdKey) return h;
+    const merged: SocietyDomesticHelper = {
+      ...h,
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
+    const passCode = merged.passCode || h.passCode;
+    const gatePassNumber = merged.gatePassNumber || `GP-HLP-${passCode}`;
+    const helperId = merged.helperId || `HLP-${new Date().getFullYear()}-${passCode.slice(-4)}`;
+    return {
+      ...merged,
+      passCode,
+      gatePassNumber,
+      helperId,
+      qrToken: buildHelperQrPayload({
+        id: merged.id,
+        helperId,
+        societyId: merged.societyId || societyId,
+        societyName: merged.societyName,
+        flatNumber: merged.flatNumber,
+        name: merged.name,
+        role: merged.role,
+        passCode,
+        gatePassNumber,
+      }),
+    };
+  });
+  setStored('hpz_soc_hlp_' + societyId, updated);
+  return true;
+}
+
+export async function deleteDomesticHelper(societyId: string, helperIdKey: string): Promise<boolean> {
+  const list = await getSocietyDomesticHelpers(societyId);
+  const filtered = list.filter((h) => h.id !== helperIdKey);
+  setStored('hpz_soc_hlp_' + societyId, filtered);
+  return true;
+}
+
+export async function toggleDomesticHelperStatus(
+  societyId: string,
+  helperId: string,
+  currentStatus?: 'ACTIVE' | 'REVOKED'
+): Promise<boolean> {
+  const list = await getSocietyDomesticHelpers(societyId);
+  const updated = list.map((h) => {
+    if (h.id !== helperId) return h;
+    const nextStatus: 'ACTIVE' | 'REVOKED' =
+      (currentStatus || h.status) === 'ACTIVE' ? 'REVOKED' : 'ACTIVE';
+    return { ...h, status: nextStatus, updatedAt: new Date().toISOString() };
+  });
+  setStored('hpz_soc_hlp_' + societyId, updated);
+  return true;
 }
 
 export async function revokeDomesticHelper(societyId: string, helperId: string): Promise<boolean> {
   const list = await getSocietyDomesticHelpers(societyId);
-  const updated = list.map((h) => (h.id === helperId ? { ...h, status: 'REVOKED' as const } : h));
+  const updated = list.map((h) =>
+    h.id === helperId ? { ...h, status: 'REVOKED' as const, updatedAt: new Date().toISOString() } : h
+  );
   setStored('hpz_soc_hlp_' + societyId, updated);
   return true;
 }
@@ -1401,10 +1653,450 @@ export async function createCommunityPost(
 }
 
 // ==========================================
-// 15. SOCIETY STAFF
+// 15. SOCIETY STAFF (STRICT SOCIETY-SCOPED + LOGIN CREDENTIAL SYNC)
 // ==========================================
+const SOCIETY_STAFF_REGISTRY_KEY = 'hpz_soc_staff_accounts';
+
+export interface SocietyStaffAuthIndexEntry {
+  id: string;
+  uid: string;
+  email: string;
+  societyId: string;
+  societyName: string;
+  societyCode: string;
+}
+
+function getSocietyStaffAuthIndex(): SocietyStaffAuthIndexEntry[] {
+  return getStored<SocietyStaffAuthIndexEntry[]>(SOCIETY_STAFF_REGISTRY_KEY, []);
+}
+
+function setSocietyStaffAuthIndex(entries: SocietyStaffAuthIndexEntry[]): void {
+  setStored(SOCIETY_STAFF_REGISTRY_KEY, entries);
+}
+
+function syncSocietyStaffAccount(staff: SocietyStaffMember, password?: string): void {
+  try {
+    if (staff.isOwner || staff.role === 'Society Admin') return;
+    const normalizedEmail = staff.email?.trim().toLowerCase();
+    if (!normalizedEmail) return;
+
+    const effectiveUid = staff.uid || `usr_soc_staff_${staff.id}`;
+    const resolvedSocietyName = staff.societyName || 'Assigned Society';
+    const resolvedSocietyCode = staff.societyCode || 'SOC';
+
+    // 1. Update Society Staff Auth Index (keeps Society Staff strictly mapped to its own societyId)
+    const indexList = getSocietyStaffAuthIndex().filter(
+      (entry) => entry.id !== staff.id && entry.uid !== effectiveUid
+    );
+    indexList.push({
+      id: staff.id,
+      uid: effectiveUid,
+      email: normalizedEmail,
+      societyId: staff.societyId,
+      societyName: resolvedSocietyName,
+      societyCode: resolvedSocietyCode,
+    });
+    setSocietyStaffAuthIndex(indexList);
+
+    // 2. Sync into happiiz_user_accounts for profile consistency
+    const rawAccounts = localStorage.getItem('happiiz_user_accounts');
+    const accounts: UserProfile[] = rawAccounts ? JSON.parse(rawAccounts) : [];
+    const existingIdx = accounts.findIndex(
+      (a) => a.uid === effectiveUid || (a.email && a.email.toLowerCase() === normalizedEmail)
+    );
+
+    const staffProfile: UserProfile = {
+      uid: effectiveUid,
+      fullName: staff.fullName,
+      displayName: staff.fullName,
+      email: normalizedEmail,
+      phoneNumber: staff.phone,
+      preferredLanguage: 'en',
+      accountStatus: staff.status === 'ACTIVE' ? 'ACTIVE' : 'SUSPENDED',
+      createdAt: staff.joinedAt || new Date().toISOString(),
+      updatedAt: staff.updatedAt || new Date().toISOString(),
+      lastLoginAt: staff.lastLoginAt || new Date().toISOString(),
+      onboardingCompleted: true,
+      isSuperAdmin: false,
+      primaryRole: 'SOCIETY_STAFF',
+      role: 'SOCIETY_STAFF',
+      societyId: staff.societyId,
+      societyName: resolvedSocietyName,
+      societyCode: resolvedSocietyCode,
+      societyStaffId: staff.id,
+      societyStaffRole: staff.role,
+      societyDepartment: staff.assignedArea || 'Society Administration',
+      societyPermissions: Array.isArray(staff.permissions) ? staff.permissions : [],
+    };
+
+    if (existingIdx >= 0) {
+      accounts[existingIdx] = { ...accounts[existingIdx], ...staffProfile };
+    } else {
+      accounts.push(staffProfile);
+    }
+    localStorage.setItem('happiiz_user_accounts', JSON.stringify(accounts));
+
+    const effectivePassword = (password || staff.password || '').trim();
+    if (effectivePassword) {
+      setUserStoredPassword(effectiveUid, effectivePassword);
+    }
+  } catch (err) {
+    console.warn('[societyAdmin.service] Could not sync society staff account:', err);
+  }
+}
+
+function removeSocietyStaffAccount(staff: SocietyStaffMember): void {
+  try {
+    const effectiveUid = staff.uid || `usr_soc_staff_${staff.id}`;
+    const normalizedEmail = staff.email?.trim().toLowerCase();
+
+    const filteredIndex = getSocietyStaffAuthIndex().filter(
+      (e) => e.id !== staff.id && e.uid !== effectiveUid
+    );
+    setSocietyStaffAuthIndex(filteredIndex);
+
+    const rawAccounts = localStorage.getItem('happiiz_user_accounts');
+    if (rawAccounts) {
+      const accounts: UserProfile[] = JSON.parse(rawAccounts);
+      localStorage.setItem(
+        'happiiz_user_accounts',
+        JSON.stringify(
+          accounts.filter(
+            (a) =>
+              a.uid !== effectiveUid &&
+              !(normalizedEmail && a.email && a.email.toLowerCase() === normalizedEmail && a.primaryRole === 'SOCIETY_STAFF')
+          )
+        )
+      );
+    }
+  } catch (_) {}
+}
+
+function assertUniqueStaffLoginEmail(email: string, excludeStaffId?: string): void {
+  const normalized = email.trim().toLowerCase();
+  if (!normalized) {
+    throw new Error('Staff login email ID is required.');
+  }
+
+  // Prevent colliding with Super Admin / MOCK_USERS (except default staff id being edited)
+  for (const roleKey of Object.keys(MOCK_USERS) as (keyof typeof MOCK_USERS)[]) {
+    const mock = MOCK_USERS[roleKey];
+    if (mock?.email && mock.email.toLowerCase() === normalized) {
+      if (roleKey === 'SOCIETY_STAFF' && excludeStaffId && mock.societyStaffId === excludeStaffId) {
+        continue;
+      }
+      throw new Error(`Email "${normalized}" is already reserved by an existing ${roleKey.replace('_', ' ')} account.`);
+    }
+  }
+
+  // Prevent colliding with Super Admin Platform Staff
+  try {
+    const saStaffRaw = localStorage.getItem('happiiz_sa_staff');
+    if (saStaffRaw) {
+      const saList: any[] = JSON.parse(saStaffRaw);
+      if (saList.some((s) => s.email && s.email.trim().toLowerCase() === normalized)) {
+        throw new Error(`Email "${normalized}" is already used by a Platform Staff account. Use a unique email for Society Staff.`);
+      }
+    }
+  } catch (err: any) {
+    if (err?.message?.includes('already used')) throw err;
+  }
+
+  // Prevent colliding with any existing Society Staff across any society
+  const indexList = getSocietyStaffAuthIndex();
+  const conflict = indexList.find(
+    (entry) => entry.email.toLowerCase() === normalized && entry.id !== excludeStaffId
+  );
+  if (conflict) {
+    throw new Error(`A Society Staff account with email "${normalized}" already exists.`);
+  }
+
+  // Check current societies' staff lists directly in localStorage as well
+  try {
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('hpz_soc_staff_') && key !== SOCIETY_STAFF_REGISTRY_KEY) {
+        const raw = localStorage.getItem(key);
+        if (!raw) continue;
+        const list: SocietyStaffMember[] = JSON.parse(raw);
+        if (
+          Array.isArray(list) &&
+          list.some(
+            (s) =>
+              s.email &&
+              s.email.trim().toLowerCase() === normalized &&
+              s.id !== excludeStaffId
+          )
+        ) {
+          throw new Error(`A staff account with email "${normalized}" already exists.`);
+        }
+      }
+    }
+  } catch (err: any) {
+    if (err?.message?.includes('already exists')) throw err;
+  }
+}
+
 export async function getSocietyStaff(societyId: string): Promise<SocietyStaffMember[]> {
-  return getStored<SocietyStaffMember[]>('hpz_soc_staff_' + societyId, DEFAULT_STAFF);
+  const storageKey = 'hpz_soc_staff_' + societyId;
+  const fallback = societyId === 'soc_emerald_heights' ? DEFAULT_STAFF : [];
+  const rawList = getStored<SocietyStaffMember[]>(storageKey, fallback);
+
+  let changed = false;
+  const normalized = rawList
+    .filter((s) => !s.societyId || s.societyId === societyId)
+    .map((s) => {
+      const defaultMatch =
+        societyId === 'soc_emerald_heights'
+          ? DEFAULT_STAFF.find((d) => d.id === s.id)
+          : undefined;
+
+      const resolvedUid = s.uid || defaultMatch?.uid || `usr_soc_staff_${s.id}`;
+      const resolvedEmail = s.email || defaultMatch?.email;
+      const resolvedPassword = s.password || defaultMatch?.password;
+      const resolvedPermissions =
+        Array.isArray(s.permissions) && s.permissions.length > 0
+          ? s.permissions
+          : defaultMatch?.permissions ||
+            DEFAULT_SOCIETY_STAFF_PERMISSIONS[s.role] ||
+            ['society.visitors.manage', 'society.helpdesk.manage'];
+      const isOwner = Boolean(s.isOwner || s.role === 'Society Admin' || defaultMatch?.isOwner);
+
+      if (
+        s.uid !== resolvedUid ||
+        s.email !== resolvedEmail ||
+        s.password !== resolvedPassword ||
+        !Array.isArray(s.permissions) ||
+        Boolean(s.isOwner) !== isOwner
+      ) {
+        changed = true;
+      }
+
+      return {
+        ...s,
+        uid: resolvedUid,
+        societyId,
+        email: resolvedEmail,
+        password: resolvedPassword,
+        permissions: resolvedPermissions,
+        isOwner,
+      };
+    });
+
+  if (changed || (!localStorage.getItem(storageKey) && fallback.length > 0)) {
+    setStored(storageKey, normalized);
+  }
+
+  // Ensure active credentials for default / stored staff are indexed for login
+  normalized.forEach((member) => {
+    if (!member.isOwner && member.email) {
+      syncSocietyStaffAccount(member, member.password);
+    }
+  });
+
+  return normalized;
+}
+
+export async function createSocietyStaff(
+  societyId: string,
+  member: Partial<SocietyStaffMember> & { societyName?: string; societyCode?: string }
+): Promise<SocietyStaffMember> {
+  const current = await getSocietyStaff(societyId);
+  const normalizedEmail = (member.email || '').trim().toLowerCase();
+  assertUniqueStaffLoginEmail(normalizedEmail);
+
+  const staffPassword = (member.password || '').trim();
+  if (!staffPassword || staffPassword.length < 6) {
+    throw new Error('Login password must be at least 6 characters.');
+  }
+
+  const assignedPermissions =
+    Array.isArray(member.permissions) && member.permissions.length > 0
+      ? member.permissions
+      : DEFAULT_SOCIETY_STAFF_PERMISSIONS[member.role || 'Society Staff'] || [
+          'society.visitors.manage',
+        ];
+
+  const now = new Date().toISOString();
+  const id = `stf_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
+  const uid = `usr_soc_staff_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+
+  const newStaff: SocietyStaffMember = {
+    id,
+    uid,
+    societyId,
+    societyName: member.societyName || 'Assigned Society',
+    societyCode: member.societyCode || 'SOC',
+    fullName: (member.fullName || 'Society Staff Member').trim(),
+    phone: (member.phone || '').trim(),
+    email: normalizedEmail,
+    password: staffPassword,
+    role: member.role && member.role !== 'Society Admin' ? member.role : 'Society Manager',
+    assignedArea: (member.assignedArea || 'Estate Office').trim(),
+    permissions: assignedPermissions,
+    isOwner: false,
+    status: 'ACTIVE',
+    joinedAt: now,
+    updatedAt: now,
+  };
+
+  setStored('hpz_soc_staff_' + societyId, [newStaff, ...current]);
+  syncSocietyStaffAccount(newStaff, staffPassword);
+
+  await recordAuditLog(
+    societyId,
+    auth?.currentUser?.uid || 'usr_society_admin',
+    'Society Admin',
+    'SOCIETY_ADMIN',
+    'STAFF_CREATED',
+    newStaff.id,
+    `Created society staff ${newStaff.fullName} (${newStaff.email}) as ${newStaff.role} with ${newStaff.permissions?.length || 0} permissions`
+  );
+
+  syncBus.broadcast(
+    'ROLE_PERMISSIONS_UPDATED',
+    societyId,
+    auth?.currentUser?.uid || 'usr_society_admin',
+    'SOCIETY_ADMIN',
+    { scope: 'SOCIETY_STAFF', staffId: newStaff.id, societyId }
+  );
+
+  return newStaff;
+}
+
+export async function updateSocietyStaff(
+  societyId: string,
+  staffId: string,
+  updates: Partial<SocietyStaffMember>
+): Promise<SocietyStaffMember | null> {
+  const current = await getSocietyStaff(societyId);
+  const existing = current.find((s) => s.id === staffId);
+  if (!existing) return null;
+  if (existing.isOwner || existing.role === 'Society Admin') {
+    throw new Error('Society Owner account cannot be modified here.');
+  }
+
+  const nextEmail = updates.email ? updates.email.trim().toLowerCase() : existing.email || '';
+  assertUniqueStaffLoginEmail(nextEmail, staffId);
+
+  const nextPassword =
+    updates.password && updates.password.trim().length >= 6
+      ? updates.password.trim()
+      : existing.password;
+
+  const updatedStaff: SocietyStaffMember = {
+    ...existing,
+    ...updates,
+    id: existing.id,
+    uid: existing.uid || `usr_soc_staff_${existing.id}`,
+    societyId,
+    societyName: updates.societyName || existing.societyName,
+    societyCode: updates.societyCode || existing.societyCode,
+    email: nextEmail,
+    password: nextPassword,
+    permissions:
+      Array.isArray(updates.permissions) && updates.permissions.length > 0
+        ? updates.permissions
+        : existing.permissions || [],
+    updatedAt: new Date().toISOString(),
+  };
+
+  const nextList = current.map((s) => (s.id === staffId ? updatedStaff : s));
+  setStored('hpz_soc_staff_' + societyId, nextList);
+  syncSocietyStaffAccount(updatedStaff, nextPassword);
+
+  await recordAuditLog(
+    societyId,
+    auth?.currentUser?.uid || 'usr_society_admin',
+    'Society Admin',
+    'SOCIETY_ADMIN',
+    'STAFF_UPDATED',
+    staffId,
+    `Updated access & credentials for ${updatedStaff.fullName} (${updatedStaff.role})`
+  );
+
+  syncBus.broadcast(
+    'ROLE_PERMISSIONS_UPDATED',
+    societyId,
+    auth?.currentUser?.uid || 'usr_society_admin',
+    'SOCIETY_ADMIN',
+    { scope: 'SOCIETY_STAFF', staffId, societyId }
+  );
+
+  return updatedStaff;
+}
+
+export async function toggleSocietyStaffStatus(
+  societyId: string,
+  staffId: string,
+  currentStatus: 'ACTIVE' | 'INACTIVE'
+): Promise<boolean> {
+  const current = await getSocietyStaff(societyId);
+  const target = current.find((s) => s.id === staffId);
+  if (!target || target.isOwner || target.role === 'Society Admin') return false;
+
+  const nextStatus: 'ACTIVE' | 'INACTIVE' = currentStatus === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+  let updatedTarget: SocietyStaffMember | null = null;
+  const nextList = current.map((s) => {
+    if (s.id !== staffId) return s;
+    updatedTarget = { ...s, status: nextStatus, updatedAt: new Date().toISOString() };
+    return updatedTarget;
+  });
+
+  setStored('hpz_soc_staff_' + societyId, nextList);
+  if (updatedTarget) {
+    syncSocietyStaffAccount(updatedTarget);
+  }
+
+  await recordAuditLog(
+    societyId,
+    auth?.currentUser?.uid || 'usr_society_admin',
+    'Society Admin',
+    'SOCIETY_ADMIN',
+    'STAFF_STATUS_CHANGED',
+    staffId,
+    `Changed society staff ${target.fullName} status to ${nextStatus}`
+  );
+
+  syncBus.broadcast(
+    'ROLE_PERMISSIONS_UPDATED',
+    societyId,
+    auth?.currentUser?.uid || 'usr_society_admin',
+    'SOCIETY_ADMIN',
+    { scope: 'SOCIETY_STAFF', staffId, societyId, status: nextStatus }
+  );
+
+  return true;
+}
+
+export async function deleteSocietyStaff(societyId: string, staffId: string): Promise<boolean> {
+  const current = await getSocietyStaff(societyId);
+  const target = current.find((s) => s.id === staffId);
+  if (!target || target.isOwner || target.role === 'Society Admin') return false;
+
+  const nextList = current.filter((s) => s.id !== staffId);
+  setStored('hpz_soc_staff_' + societyId, nextList);
+  removeSocietyStaffAccount(target);
+
+  await recordAuditLog(
+    societyId,
+    auth?.currentUser?.uid || 'usr_society_admin',
+    'Society Admin',
+    'SOCIETY_ADMIN',
+    'STAFF_DELETED',
+    staffId,
+    `Removed society staff ${target.fullName} (${target.email || target.phone})`
+  );
+
+  syncBus.broadcast(
+    'ROLE_PERMISSIONS_UPDATED',
+    societyId,
+    auth?.currentUser?.uid || 'usr_society_admin',
+    'SOCIETY_ADMIN',
+    { scope: 'SOCIETY_STAFF', staffId, societyId, deleted: true }
+  );
+
+  return true;
 }
 
 // ==========================================
@@ -1572,12 +2264,22 @@ export const societyAdminService = {
   },
   getHouseholdMembers: getSocietyHouseholdMembers,
   createHouseholdMember: addHouseholdMember,
+  updateHouseholdMember,
+  deleteHouseholdMember,
   getVehicles: getSocietyVehicles,
   createVehicle: addSocietyVehicle,
+  updateVehicle: updateSocietyVehicle,
+  deleteVehicle: deleteSocietyVehicle,
   getDomesticHelpers: getSocietyDomesticHelpers,
   createDomesticHelper: addDomesticHelper,
-  toggleHelperStatus: async (id: string, status: 'ACTIVE' | 'REVOKED') => {
-    return revokeDomesticHelper('soc_emerald_heights', id);
+  updateDomesticHelper,
+  deleteDomesticHelper,
+  toggleHelperStatus: async (
+    id: string,
+    status: 'ACTIVE' | 'REVOKED',
+    societyId: string = 'soc_emerald_heights'
+  ) => {
+    return toggleDomesticHelperStatus(societyId, id, status);
   },
   getGates: getSocietyGates,
   createGate: addSocietyGate,
@@ -1610,12 +2312,19 @@ export const societyAdminService = {
     return true;
   },
   getStaff: getSocietyStaff,
-  createStaff: async (s: any) => {
-    return s;
+  createStaff: async (s: any, societyId?: string) => {
+    const targetSocietyId = societyId || s?.societyId || 'soc_emerald_heights';
+    return createSocietyStaff(targetSocietyId, s);
   },
-  toggleStaffStatus: async (id: string, status: 'ACTIVE' | 'INACTIVE') => {
-    return true;
+  updateStaff: updateSocietyStaff,
+  toggleStaffStatus: async (
+    id: string,
+    status: 'ACTIVE' | 'INACTIVE',
+    societyId: string = 'soc_emerald_heights'
+  ) => {
+    return toggleSocietyStaffStatus(societyId, id, status);
   },
+  deleteStaff: deleteSocietyStaff,
   getSettings: getSocietyDetailedSettings,
   updateSettings: updateSocietyDetailedSettings,
   getAuditLogs: getSocietyAuditLogs,

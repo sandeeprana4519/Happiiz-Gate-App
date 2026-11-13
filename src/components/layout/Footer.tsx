@@ -112,6 +112,17 @@ export const Footer: React.FC = () => {
                 </Link>
 
                 <Link
+                  to="/login?role=SOCIETY_STAFF"
+                  className="flex items-center justify-between p-2.5 rounded-xl bg-[#111726] border border-white/10 hover:border-teal-500/60 hover:bg-[#182033] text-xs font-semibold text-gray-100 group transition-all"
+                >
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-teal-400" />
+                    <span>Society Staff Login</span>
+                  </div>
+                  <ChevronRight className="w-3.5 h-3.5 text-gray-500 group-hover:text-teal-400 group-hover:translate-x-0.5 transition-all" />
+                </Link>
+
+                <Link
                   to="/login?role=SUPER_ADMIN"
                   className="flex items-center justify-between p-2.5 rounded-xl bg-[#111726] border border-white/10 hover:border-red-500/60 hover:bg-[#182033] text-xs font-semibold text-gray-100 group transition-all"
                 >

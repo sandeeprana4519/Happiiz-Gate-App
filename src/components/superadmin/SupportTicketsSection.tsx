@@ -3,33 +3,38 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { SupportTicket } from '../../types/admin';
+import { Society } from '../../types/society';
 import { updateSupportTicket } from '../../services/firebase/superadmin.service';
 import {
   Headset,
   Search,
-  MessageSquare,
-  Clock,
-  CheckCircle2,
-  AlertCircle,
-  FileText,
-  User,
-  Building,
-  Send,
   X,
-  Plus,
 } from 'lucide-react';
+import { OperationsExportToolbar } from './OperationsExportToolbar';
+import {
+  OperationsPeriodMode,
+  buildFilterSummaryText,
+  buildPeriodLabel,
+  exportOperationsPdf,
+  getSocietyAreaLabel,
+  matchesOperationsPeriod,
+  matchesSocietyAndArea,
+} from './operationsExportUtils';
 
 interface SupportTicketsSectionProps {
   tickets: SupportTicket[];
+  societies?: Society[];
   onRefresh: () => Promise<void>;
 }
 
 export const SupportTicketsSection: React.FC<SupportTicketsSectionProps> = ({
   tickets,
+  societies = [],
   onRefresh,
 }) => {
+  const todayIso = new Date().toISOString().slice(0, 10);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED'>('ALL');
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
@@ -38,16 +43,53 @@ export const SupportTicketsSection: React.FC<SupportTicketsSectionProps> = ({
   const [newStatus, setNewStatus] = useState<SupportTicket['status']>('IN_PROGRESS');
   const [loading, setLoading] = useState(false);
 
-  const filtered = tickets.filter((t) => {
-    const matchesSearch =
-      t.ticketNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      t.subject.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      t.submittedByName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (t.societyName && t.societyName.toLowerCase().includes(searchTerm.toLowerCase()));
+  // Operations Period, Society & Area Filters
+  const [periodMode, setPeriodMode] = useState<OperationsPeriodMode>('ALL');
+  const [dayValue, setDayValue] = useState<string>(todayIso);
+  const [monthValue, setMonthValue] = useState<string>(todayIso.slice(0, 7));
+  const [yearValue, setYearValue] = useState<string>(todayIso.slice(0, 4));
+  const [societyFilter, setSocietyFilter] = useState<string>('ALL');
+  const [areaFilter, setAreaFilter] = useState<string>('ALL');
 
-    const matchesStatus = statusFilter === 'ALL' || t.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const filtered = useMemo(() => {
+    return tickets.filter((t) => {
+      const matchesSearch =
+        !searchTerm ||
+        t.ticketNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        t.subject.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        t.submittedByName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (t.societyName && t.societyName.toLowerCase().includes(searchTerm.toLowerCase()));
+
+      const matchesStatus = statusFilter === 'ALL' || t.status === statusFilter;
+      const matchesPeriod = matchesOperationsPeriod(
+        t.createdAt,
+        periodMode,
+        dayValue,
+        monthValue,
+        yearValue
+      );
+      const matchesScope = matchesSocietyAndArea({
+        societies,
+        societyId: t.societyId,
+        societyName: t.societyName,
+        societyFilter,
+        areaFilter,
+      });
+
+      return matchesSearch && matchesStatus && matchesPeriod && matchesScope;
+    });
+  }, [
+    tickets,
+    societies,
+    searchTerm,
+    statusFilter,
+    periodMode,
+    dayValue,
+    monthValue,
+    yearValue,
+    societyFilter,
+    areaFilter,
+  ]);
 
   const handleUpdateTicket = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,6 +111,64 @@ export const SupportTicketsSection: React.FC<SupportTicketsSectionProps> = ({
     }
   };
 
+  const handleResetFilters = () => {
+    setPeriodMode('ALL');
+    setDayValue(todayIso);
+    setMonthValue(todayIso.slice(0, 7));
+    setYearValue(todayIso.slice(0, 4));
+    setSocietyFilter('ALL');
+    setAreaFilter('ALL');
+    setSearchTerm('');
+    setStatusFilter('ALL');
+  };
+
+  const handleExportPdf = () => {
+    const columns = [
+      'Ticket #',
+      'Subject',
+      'Category',
+      'Priority',
+      'Submitted By',
+      'Phone',
+      'Society',
+      'Area',
+      'Status',
+      'Created Date',
+    ];
+    const rows = filtered.map((t) => ({
+      'Ticket #': t.ticketNumber,
+      Subject: t.subject,
+      Category: t.category,
+      Priority: t.priority,
+      'Submitted By': t.submittedByName,
+      Phone: t.submittedByPhone,
+      Society: t.societyName || 'Direct Platform',
+      Area: getSocietyAreaLabel(societies, t.societyId, t.societyName),
+      Status: t.status,
+      'Created Date': new Date(t.createdAt).toLocaleDateString(),
+    }));
+
+    const { slug } = buildPeriodLabel(periodMode, dayValue, monthValue, yearValue);
+    exportOperationsPdf({
+      title: 'Support Tickets & Helpdesk SLA Report',
+      subtitle: 'Multi-tenant Support Escalation & Resolution Summary',
+      filename: `happiiz_support_tickets_${slug}`,
+      columns,
+      rows,
+      filterSummary: buildFilterSummaryText({
+        societies,
+        societyFilter,
+        areaFilter,
+        mode: periodMode,
+        dayValue,
+        monthValue,
+        yearValue,
+        searchTerm,
+        recordCount: rows.length,
+      }),
+    });
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -82,6 +182,27 @@ export const SupportTicketsSection: React.FC<SupportTicketsSectionProps> = ({
           {tickets.filter((t) => t.status === 'OPEN' || t.status === 'IN_PROGRESS').length} Active Tickets
         </span>
       </div>
+
+      {/* Period, Society-wise & Area-wise Filter + PDF Export Toolbar */}
+      <OperationsExportToolbar
+        societies={societies}
+        periodMode={periodMode}
+        onPeriodModeChange={setPeriodMode}
+        dayValue={dayValue}
+        onDayValueChange={setDayValue}
+        monthValue={monthValue}
+        onMonthValueChange={setMonthValue}
+        yearValue={yearValue}
+        onYearValueChange={setYearValue}
+        societyFilter={societyFilter}
+        onSocietyFilterChange={setSocietyFilter}
+        areaFilter={areaFilter}
+        onAreaFilterChange={setAreaFilter}
+        matchedCount={filtered.length}
+        onExportPdf={handleExportPdf}
+        pdfButtonLabel="Download Tickets PDF"
+        onResetFilters={handleResetFilters}
+      />
 
       {/* Filter and Search */}
       <div className="p-3 rounded-2xl bg-[#FFFFFF] border border-[#E6F1F5] flex flex-col md:flex-row gap-3 items-center justify-between shadow-xs">
@@ -113,58 +234,64 @@ export const SupportTicketsSection: React.FC<SupportTicketsSectionProps> = ({
       </div>
 
       {/* Tickets Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filtered.map((t) => (
-          <div
-            key={t.id}
-            onClick={() => {
-              setSelectedTicket(t);
-              setNewStatus(t.status);
-            }}
-            className="p-5 rounded-2xl bg-[#FFFFFF] border border-[#E6F1F5] shadow-xs flex flex-col justify-between space-y-3 hover:border-[#673AB7]/40 transition-all cursor-pointer group"
-          >
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-[11px] font-bold text-[#673AB7]">{t.ticketNumber}</span>
+      {filtered.length === 0 ? (
+        <div className="p-10 rounded-2xl bg-white border border-[#E6F1F5] text-center text-xs text-[#64748B]">
+          No support tickets match your current period, society, or area filters.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filtered.map((t) => (
+            <div
+              key={t.id}
+              onClick={() => {
+                setSelectedTicket(t);
+                setNewStatus(t.status);
+              }}
+              className="p-5 rounded-2xl bg-[#FFFFFF] border border-[#E6F1F5] shadow-xs flex flex-col justify-between space-y-3 hover:border-[#673AB7]/40 transition-all cursor-pointer group"
+            >
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-[11px] font-bold text-[#673AB7]">{t.ticketNumber}</span>
+                  <span
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                      t.priority === 'CRITICAL'
+                        ? 'bg-red-50 text-red-700 border border-red-200'
+                        : t.priority === 'HIGH'
+                        ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                        : 'bg-slate-50 text-slate-700 border border-slate-200'
+                    }`}
+                  >
+                    {t.priority}
+                  </span>
+                </div>
+
+                <h3 className="font-extrabold text-sm text-[#111111] line-clamp-1 group-hover:text-[#673AB7] transition-colors">
+                  {t.subject}
+                </h3>
+                <p className="text-xs text-[#A9B0B8] line-clamp-2 leading-relaxed">{t.description}</p>
+              </div>
+
+              <div className="pt-3 border-t border-[#E6F1F5] flex items-center justify-between text-[11px] text-[#A9B0B8]">
+                <div>
+                  <span className="font-semibold text-[#111111]">{t.submittedByName}</span>
+                  {t.societyName && <span className="block truncate max-w-[160px]">{t.societyName}</span>}
+                </div>
                 <span
-                  className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                    t.priority === 'CRITICAL'
-                      ? 'bg-red-50 text-red-700 border border-red-200'
-                      : t.priority === 'HIGH'
-                      ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                      : 'bg-slate-50 text-slate-700 border border-slate-200'
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                    t.status === 'OPEN'
+                      ? 'bg-amber-50 text-amber-700'
+                      : t.status === 'IN_PROGRESS'
+                      ? 'bg-sky-50 text-sky-700'
+                      : 'bg-emerald-50 text-emerald-700'
                   }`}
                 >
-                  {t.priority}
+                  {t.status}
                 </span>
               </div>
-
-              <h3 className="font-extrabold text-sm text-[#111111] line-clamp-1 group-hover:text-[#673AB7] transition-colors">
-                {t.subject}
-              </h3>
-              <p className="text-xs text-[#A9B0B8] line-clamp-2 leading-relaxed">{t.description}</p>
             </div>
-
-            <div className="pt-3 border-t border-[#E6F1F5] flex items-center justify-between text-[11px] text-[#A9B0B8]">
-              <div>
-                <span className="font-semibold text-[#111111]">{t.submittedByName}</span>
-                {t.societyName && <span className="block truncate max-w-[160px]">{t.societyName}</span>}
-              </div>
-              <span
-                className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                  t.status === 'OPEN'
-                    ? 'bg-amber-50 text-amber-700'
-                    : t.status === 'IN_PROGRESS'
-                    ? 'bg-sky-50 text-sky-700'
-                    : 'bg-emerald-50 text-emerald-700'
-                }`}
-              >
-                {t.status}
-              </span>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* Ticket Management & Reply Modal */}
       {selectedTicket && (

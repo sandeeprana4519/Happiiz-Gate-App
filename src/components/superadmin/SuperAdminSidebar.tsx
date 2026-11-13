@@ -3,56 +3,25 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
-  LayoutDashboard,
-  Building2,
-  FileCheck2,
-  UserCog,
-  Users,
-  ShieldCheck,
-  Wrench,
-  CreditCard,
-  DollarSign,
-  Headset,
-  Bell,
-  BarChart3,
-  KeyRound,
-  History,
-  Settings,
-  LogOut,
+  ChevronDown,
   ChevronRight,
   ShieldAlert,
-  Briefcase,
-  ClipboardList,
-  AlertOctagon,
-  Sliders,
-  Activity,
-  UserPlus,
-  Layers,
+  ShieldCheck,
 } from 'lucide-react';
+import {
+  SUPER_ADMIN_SIDEBAR_CONFIG,
+  SuperAdminTab,
+  SidebarBadgeKey,
+  SidebarNavItem,
+  findNavItemByPath,
+  findSectionIdByTab,
+} from './sidebarNavConfig';
 
-export type SuperAdminTab =
-  | 'dashboard'
-  | 'societies'
-  | 'companies'
-  | 'onboarding'
-  | 'subscriptions'
-  | 'finance'
-  | 'marketplace-services'
-  | 'partners'
-  | 'partner-kyc'
-  | 'users'
-  | 'roles'
-  | 'emergency'
-  | 'support'
-  | 'notifications'
-  | 'reports'
-  | 'feature-flags'
-  | 'system-health'
-  | 'platform-staff'
-  | 'audit-logs'
-  | 'settings';
+export type { SuperAdminTab };
+export { SUPER_ADMIN_SIDEBAR_CONFIG };
 
 interface SuperAdminSidebarProps {
   currentTab: SuperAdminTab;
@@ -60,7 +29,21 @@ interface SuperAdminSidebarProps {
   pendingApprovalsCount?: number;
   openTicketsCount?: number;
   activeEmergenciesCount?: number;
+  onCloseMobile?: () => void;
 }
+
+const SECTION_ACCENT_BAR: Record<string, string> = {
+  core: 'bg-violet-400',
+  ecosystem: 'bg-emerald-400',
+  marketplace: 'bg-amber-400',
+  billing: 'bg-cyan-400',
+  'our-team': 'bg-sky-400',
+  operations: 'bg-rose-400',
+  intelligence: 'bg-indigo-400',
+  'control-bar': 'bg-fuchsia-400',
+  devops: 'bg-teal-400',
+  'security-audit': 'bg-slate-400',
+};
 
 export const SuperAdminSidebar: React.FC<SuperAdminSidebarProps> = ({
   currentTab,
@@ -68,126 +51,190 @@ export const SuperAdminSidebar: React.FC<SuperAdminSidebarProps> = ({
   pendingApprovalsCount = 0,
   openTicketsCount = 0,
   activeEmergenciesCount = 0,
+  onCloseMobile,
 }) => {
-  const navItems: {
-    id: SuperAdminTab;
-    label: string;
-    icon: React.ComponentType<{ className?: string }>;
-    badge?: number;
-    badgeColor?: string;
-    category?: string;
-  }[] = [
-    { id: 'dashboard', label: 'Master Dashboard', icon: LayoutDashboard, category: 'Core' },
-    { id: 'societies', label: 'Societies', icon: Building2, category: 'Ecosystem' },
-    { id: 'companies', label: 'Companies', icon: Briefcase, category: 'Ecosystem' },
-    { id: 'subscriptions', label: 'Subscriptions', icon: CreditCard, category: 'Billing' },
-    { id: 'finance', label: 'Billing & Revenue', icon: DollarSign, category: 'Billing' },
-    { id: 'marketplace-services', label: 'Service Catalog', icon: Layers, category: 'Marketplace' },
-    { id: 'partners', label: 'Our Partners', icon: Wrench, category: 'Marketplace' },
-    {
-      id: 'partner-kyc',
-      label: 'Add New Partner',
-      icon: ShieldCheck,
-      badge: pendingApprovalsCount,
-      badgeColor: 'bg-amber-500 text-white',
-      category: 'Marketplace',
-    },
-    { id: 'users', label: 'Global Users', icon: Users, category: 'Directory' },
-    { id: 'roles', label: 'Roles & Permissions', icon: KeyRound, category: 'Security' },
-    {
-      id: 'emergency',
-      label: 'Emergency Monitoring',
-      icon: AlertOctagon,
-      badge: activeEmergenciesCount,
-      badgeColor: 'bg-red-500 text-white',
-      category: 'Operations',
-    },
-    { id: 'support', label: 'Support Tickets', icon: Headset, badge: openTicketsCount, category: 'Operations' },
-    { id: 'notifications', label: 'Announcements', icon: Bell, category: 'Operations' },
-    { id: 'reports', label: 'Analytics & Reports', icon: BarChart3, category: 'Intelligence' },
-    { id: 'feature-flags', label: 'Feature Management', icon: Sliders, category: 'Control' },
-    { id: 'system-health', label: 'System Health', icon: Activity, category: 'DevOps' },
-    { id: 'platform-staff', label: 'Platform Staff', icon: UserPlus, category: 'Team' },
-    { id: 'audit-logs', label: 'Audit Logs', icon: History, category: 'Security' },
-    { id: 'settings', label: 'Platform Settings', icon: Settings, category: 'System' },
-  ];
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const pathMatchedItem = findNavItemByPath(location.pathname);
+  const activeTabId: SuperAdminTab = pathMatchedItem ? pathMatchedItem.id : currentTab;
+
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {};
+    for (const section of SUPER_ADMIN_SIDEBAR_CONFIG) {
+      initial[section.id] = section.defaultOpen ?? true;
+    }
+    return initial;
+  });
+
+  useEffect(() => {
+    const activeSectionId = findSectionIdByTab(activeTabId);
+    if (activeSectionId) {
+      setExpandedSections((prev) =>
+        prev[activeSectionId] ? prev : { ...prev, [activeSectionId]: true }
+      );
+    }
+  }, [activeTabId, location.pathname]);
+
+  const badgeCounts: Record<SidebarBadgeKey, number> = {
+    pendingApprovalsCount,
+    openTicketsCount,
+    activeEmergenciesCount,
+  };
+
+  const toggleSection = (sectionId: string) => {
+    setExpandedSections((prev) => ({
+      ...prev,
+      [sectionId]: !prev[sectionId],
+    }));
+  };
+
+  const handleItemClick = (item: SidebarNavItem) => {
+    onSelectTab(item.id);
+    if (location.pathname !== item.path) {
+      navigate(item.path);
+    }
+    if (onCloseMobile) {
+      onCloseMobile();
+    }
+  };
 
   return (
-    <aside className="w-64 xl:w-72 shrink-0 bg-[#FFFFFF] border-r border-[#E6F1F5] flex flex-col h-full select-none">
-      {/* Super Admin Identity Badge */}
-      <div className="p-4 border-b border-[#E6F1F5] bg-[#F1F9FC]/60">
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-[#673AB7] text-white flex items-center justify-center font-black shadow-xs">
+    <aside className="w-64 xl:w-72 shrink-0 bg-gradient-to-b from-[#13102B] via-[#18143A] to-[#100D24] border-r border-white/10 text-slate-100 flex flex-col h-full min-h-0 select-none">
+      {/* Super Admin Identity Brand Header */}
+      <div className="p-4 border-b border-white/10 bg-white/[0.03] shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 text-white flex items-center justify-center font-black shadow-lg shadow-indigo-950/50 shrink-0">
             <ShieldAlert className="w-5 h-5" />
           </div>
           <div className="min-w-0">
-            <div className="flex items-center gap-1.5">
-              <span className="font-extrabold text-sm text-[#111111] truncate">Super Console</span>
-              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#673AB7] text-white uppercase tracking-wider">
-                Root
-              </span>
-            </div>
-            <p className="text-[11px] text-[#A9B0B8] truncate">Happiiz Gate Enterprise SaaS</p>
+            <span className="font-extrabold text-sm text-white truncate block tracking-tight">
+              Super Admin Console
+            </span>
+            <p className="text-[11px] text-indigo-200/80 truncate">
+              Happiiz Gate Enterprise
+            </p>
           </div>
         </div>
       </div>
 
-      {/* Nav List */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-1 scrollbar-thin">
-        {navItems.map((item, idx) => {
-          const Icon = item.icon;
-          const isActive = currentTab === item.id;
-          const showCategoryHeader = idx === 0 || item.category !== navItems[idx - 1].category;
+      {/* Scrollable Navigation Sections */}
+      <nav
+        aria-label="Super Admin Sidebar Navigation"
+        className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2.5 scrollbar-thin"
+      >
+        {SUPER_ADMIN_SIDEBAR_CONFIG.map((section) => {
+          const isExpanded = expandedSections[section.id] ?? true;
+          const sectionHasActive = section.items.some(
+            (item) =>
+              activeTabId === item.id ||
+              location.pathname === item.path ||
+              item.aliases?.includes(location.pathname)
+          );
+
+          const sectionBadgeTotal = section.items.reduce((sum, item) => {
+            if (!item.badgeKey) return sum;
+            return sum + (badgeCounts[item.badgeKey] || 0);
+          }, 0);
+
+          const accentColor = SECTION_ACCENT_BAR[section.id] || 'bg-indigo-400';
 
           return (
-            <React.Fragment key={item.id}>
-              {showCategoryHeader && item.category && (
-                <div className="pt-3 pb-1 px-3 text-[10px] font-extrabold text-[#A9B0B8] uppercase tracking-wider">
-                  {item.category}
-                </div>
-              )}
+            <div key={section.id} className="space-y-1">
+              {/* Collapsible Section Accordion Header */}
               <button
                 type="button"
-                onClick={() => onSelectTab(item.id)}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                  isActive
-                    ? 'bg-[#673AB7] text-white shadow-xs'
-                    : 'text-[#111111] hover:bg-[#F1F9FC] hover:text-[#673AB7]'
+                onClick={() => toggleSection(section.id)}
+                aria-expanded={isExpanded}
+                className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer ${
+                  sectionHasActive && !isExpanded
+                    ? 'text-white bg-white/10'
+                    : 'text-indigo-200/65 hover:text-white hover:bg-white/5'
                 }`}
               >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <Icon
-                    className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-[#A9B0B8]'}`}
-                  />
-                  <span className="truncate">{item.label}</span>
-                </div>
+                <span className="flex items-center gap-2 truncate">
+                  <span className={`w-1.5 h-1.5 rounded-full ${accentColor} shrink-0`} />
+                  <span className="truncate">{section.title}</span>
+                </span>
 
-                <div className="flex items-center gap-1.5">
-                  {item.badge !== undefined && item.badge > 0 && (
-                    <span
-                      className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                        isActive
-                          ? 'bg-white text-[#673AB7]'
-                          : item.badgeColor || 'bg-amber-500 text-white'
-                      }`}
-                    >
-                      {item.badge}
+                <span className="flex items-center gap-1.5 shrink-0">
+                  {!isExpanded && sectionBadgeTotal > 0 && (
+                    <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-amber-500 text-slate-950 tabular-nums">
+                      {sectionBadgeTotal}
                     </span>
                   )}
-                  {isActive && <ChevronRight className="w-3.5 h-3.5 text-white/80 shrink-0" />}
-                </div>
+                  {isExpanded ? (
+                    <ChevronDown className="w-3.5 h-3.5 text-indigo-200/60" />
+                  ) : (
+                    <ChevronRight className="w-3.5 h-3.5 text-indigo-200/60" />
+                  )}
+                </span>
               </button>
-            </React.Fragment>
+
+              {/* Section Child Navigation Items */}
+              {isExpanded && (
+                <div className="space-y-0.5 pl-0.5">
+                  {section.items.map((item) => {
+                    const Icon = item.icon;
+                    const isActive =
+                      activeTabId === item.id ||
+                      location.pathname === item.path ||
+                      Boolean(item.aliases?.includes(location.pathname));
+                    const badgeValue = item.badgeKey ? badgeCounts[item.badgeKey] : 0;
+
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => handleItemClick(item)}
+                        aria-current={isActive ? 'page' : undefined}
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-[13px] font-medium transition-all duration-150 cursor-pointer ${
+                          isActive
+                            ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white font-semibold shadow-md shadow-indigo-950/50'
+                            : 'text-slate-200/85 hover:bg-white/10 hover:text-white'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <Icon
+                            className={`w-4 h-4 shrink-0 transition-colors ${
+                              isActive ? 'text-white' : 'text-indigo-300/75'
+                            }`}
+                          />
+                          <span className="truncate">{item.label}</span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {badgeValue > 0 && (
+                            <span
+                              className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold tabular-nums ${
+                                isActive
+                                  ? 'bg-white text-indigo-700'
+                                  : item.badgeColor || 'bg-rose-500 text-white'
+                              }`}
+                            >
+                              {badgeValue}
+                            </span>
+                          )}
+                          {isActive && (
+                            <ChevronRight className="w-3.5 h-3.5 text-white/90 shrink-0" />
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           );
         })}
-      </div>
+      </nav>
 
-      {/* Bottom Security Info */}
-      <div className="p-3 border-t border-[#E6F1F5] bg-[#F1F9FC]/40 text-[11px] text-[#A9B0B8] flex items-center justify-between">
-        <span className="font-mono text-[10px]">v4.2.0 • Cloud RBAC</span>
-        <span className="inline-flex items-center gap-1 text-emerald-600 font-semibold text-[10px]">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-          Secured
+      {/* Clean Security Footer */}
+      <div className="p-3 border-t border-white/10 bg-black/20 text-[11px] text-indigo-200/75 flex items-center justify-between shrink-0">
+        <span className="font-medium">Root Access Scope</span>
+        <span className="inline-flex items-center gap-1 text-emerald-300 font-semibold text-[11px]">
+          <ShieldCheck className="w-3.5 h-3.5" />
+          Protected
         </span>
       </div>
     </aside>

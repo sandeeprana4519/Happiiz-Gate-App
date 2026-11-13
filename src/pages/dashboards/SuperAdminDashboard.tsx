@@ -5,15 +5,18 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { SuperAdminSidebar, SuperAdminTab } from '../../components/superadmin/SuperAdminSidebar';
+import {
+  findNavItemByPath,
+  findNavItemByTab,
+  normalizeSuperAdminTab,
+} from '../../components/superadmin/sidebarNavConfig';
 import { SuperAdminHeader } from '../../components/superadmin/SuperAdminHeader';
 import { OverviewSection } from '../../components/superadmin/OverviewSection';
 import { SocietiesSection } from '../../components/superadmin/SocietiesSection';
 import { ApprovalsSection } from '../../components/superadmin/ApprovalsSection';
-import { SocietyAdminsSection } from '../../components/superadmin/SocietyAdminsSection';
-import { ResidentsSection } from '../../components/superadmin/ResidentsSection';
-import { GuardsSection } from '../../components/superadmin/GuardsSection';
+import { DirectorySection } from '../../components/superadmin/DirectorySection';
 import { ServicePartnersSection } from '../../components/superadmin/ServicePartnersSection';
 import { MarketplaceServicesSection } from '../../components/superadmin/MarketplaceServicesSection';
 import { Partner360CrmSection } from '../../components/superadmin/Partner360CrmSection';
@@ -81,13 +84,31 @@ import { X, RefreshCw, ChevronRight } from 'lucide-react';
 
 export const SuperAdminDashboard: React.FC = () => {
   const { user, isFirebaseConfigured } = useAuth();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
 
-  // Active tab state (synced with ?tab= search param)
-  const rawTab = (searchParams.get('tab') as SuperAdminTab) || 'dashboard';
-  const initialTab: SuperAdminTab = (rawTab as string) === 'onboarding' ? 'societies' : rawTab;
-  const [currentTab, setCurrentTab] = useState<SuperAdminTab>(initialTab);
+  // Resolve initial tab from URL pathname (/admin/...) or ?tab= query param
+  const resolveTabFromUrl = useCallback((): SuperAdminTab => {
+    const matchedByPath = findNavItemByPath(location.pathname);
+    if (matchedByPath) {
+      if (
+        location.pathname.replace(/\/+$/, '') === '/dashboard/super-admin' &&
+        searchParams.get('tab')
+      ) {
+        return normalizeSuperAdminTab(searchParams.get('tab'));
+      }
+      return matchedByPath.id;
+    }
+    return normalizeSuperAdminTab(searchParams.get('tab'));
+  }, [location.pathname, searchParams]);
+
+  const [currentTab, setCurrentTab] = useState<SuperAdminTab>(() => resolveTabFromUrl());
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    setCurrentTab(resolveTabFromUrl());
+  }, [resolveTabFromUrl]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [partnerSubTab, setPartnerSubTab] = useState<'CRM' | 'COMPLIANCE'>('CRM');
@@ -232,9 +253,13 @@ export const SuperAdminDashboard: React.FC = () => {
     };
   }, [loadAllData]);
 
-  const handleSelectTab = (tab: SuperAdminTab) => {
-    setCurrentTab(tab);
-    setSearchParams({ tab });
+  const handleSelectTab = (tab: SuperAdminTab | string) => {
+    const normalizedTab = normalizeSuperAdminTab(tab);
+    setCurrentTab(normalizedTab);
+    const navItem = findNavItemByTab(normalizedTab);
+    if (navItem && location.pathname !== navItem.path) {
+      navigate(navItem.path);
+    }
     setMobileMenuOpen(false);
   };
 
@@ -249,19 +274,25 @@ export const SuperAdminDashboard: React.FC = () => {
       case 'onboarding':
         return { title: 'Society Onboarding & Verification Portal', subtitle: '10-step enterprise society review, legal document verification, and tenant provisioning' };
       case 'subscriptions':
-        return { title: 'SaaS Subscription Plans & Packages', subtitle: 'Configure tenant pricing tiers, gate quotas, and custom enterprise plans' };
+        return { title: 'Active Subscriptions & Tenant Licenses', subtitle: 'Track active society SaaS licenses, trial statuses, and upcoming renewals' };
+      case 'subscription-tiers':
+        return { title: 'Subscription Tiers & Packages', subtitle: 'Configure tenant pricing tiers, trial durations, and gate capacity quotas' };
+      case 'assign-plan':
+        return { title: 'Assign or Upgrade Society Plan', subtitle: 'Provision new SaaS subscriptions, upgrade packages, and extend license terms' };
       case 'finance':
-        return { title: 'Billing, Subscriptions & Revenue Ledger', subtitle: 'Platform subscription collections, payment gateways, and automated financial accounting' };
+        return { title: 'Billing & Revenue Ledger', subtitle: 'Platform subscription collections, payment gateways, and automated financial accounting' };
       case 'marketplace-services':
         return { title: 'Service Catalog & Management', subtitle: 'Configure doorstep services, pricing models, platform commission cuts, and scope of work' };
       case 'partners':
         return { title: 'Our Partners · 360° CRM & Analytics', subtitle: 'Complete 360° partner directory, date-wise ledger, customer ratings, revenue splits, and PDF statements' };
       case 'partner-kyc':
         return { title: 'Add New Partner & Verification Portal', subtitle: 'Onboard service partners, review KYC documents, police clearance, and verify applications' };
+      case 'directory':
+        return { title: 'Community Operations Directory', subtitle: 'Unified registry of Society Admins, Residents, and Security Guards across all communities' };
       case 'users':
         return { title: 'Global User Security Directory', subtitle: 'Centralized registry across all tenant societies, guards, service partners and platform staff' };
       case 'roles':
-        return { title: 'Platform Roles & Granular Permissions', subtitle: 'Role-Based Access Control, administrative security scopes, and staff privileges' };
+        return { title: 'Security Rules & Permissions', subtitle: 'Super Admin exclusive role permissions & open/hide service visibility controls' };
       case 'emergency':
         return { title: 'Global Emergency Monitoring & Panic SOS', subtitle: 'Platform-wide emergency overview, live lift entrapments, medical alerts and escalation status' };
       case 'support':
@@ -273,13 +304,13 @@ export const SuperAdminDashboard: React.FC = () => {
       case 'feature-flags':
         return { title: 'Feature Management & Module Control', subtitle: 'Dynamically toggle tenant features, SaaS plan gating, and application modules' };
       case 'system-health':
-        return { title: 'Platform System Health & Cloud Diagnostics', subtitle: 'Live infrastructure uptime, regional Firestore connectivity, and core microservices health' };
+        return { title: 'Security & Health Diagnostics', subtitle: 'Live infrastructure uptime, regional Firestore connectivity, and core microservices health' };
       case 'platform-staff':
         return { title: 'Platform Staff & Internal Administration Team', subtitle: 'Manage Happiiz Gate corporate staff, departmental access roles, and permissions' };
       case 'audit-logs':
         return { title: 'System Audit Trail & Security Center', subtitle: 'Cryptographically timestamped and immutable administrative activity log' };
       case 'settings':
-        return { title: 'Platform Global Settings', subtitle: 'Branding defaults, public registration gates, and maintenance switches' };
+        return { title: 'System / Platform Settings', subtitle: 'Branding defaults, public registration gates, and maintenance switches' };
     }
   };
 
@@ -304,24 +335,29 @@ export const SuperAdminDashboard: React.FC = () => {
 
       {/* Mobile Sidebar Drawer */}
       {mobileMenuOpen && (
-        <div className="fixed inset-0 z-50 flex lg:hidden bg-black/40 backdrop-blur-xs animate-fade-in">
-          <div className="relative w-72 max-w-[80vw] h-full bg-white shadow-2xl flex flex-col">
-            <div className="p-3 border-b border-[#E6F1F5] flex justify-end">
+        <div className="fixed inset-0 z-50 flex lg:hidden bg-black/50 backdrop-blur-xs animate-fade-in">
+          <div className="relative w-72 max-w-[85vw] h-full bg-[#13102B] shadow-2xl flex flex-col min-h-0">
+            <div className="p-3 border-b border-white/10 bg-[#100D24] flex items-center justify-between shrink-0">
+              <span className="text-xs font-extrabold uppercase tracking-wider text-indigo-200 pl-1">
+                Navigation
+              </span>
               <button
                 type="button"
                 onClick={() => setMobileMenuOpen(false)}
-                className="p-1.5 rounded-lg text-[#A9B0B8] hover:text-[#111111]"
+                className="p-1.5 rounded-lg text-indigo-200 hover:text-white hover:bg-white/10 cursor-pointer"
+                aria-label="Close navigation drawer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 min-h-0">
               <SuperAdminSidebar
                 currentTab={currentTab}
                 onSelectTab={handleSelectTab}
                 pendingApprovalsCount={pendingApprovalsCount}
                 openTicketsCount={openTicketsCount}
                 activeEmergenciesCount={activeEmergenciesCount}
+                onCloseMobile={() => setMobileMenuOpen(false)}
               />
             </div>
           </div>
@@ -338,8 +374,6 @@ export const SuperAdminDashboard: React.FC = () => {
           searchTerm={searchTerm}
           onSearchChange={setSearchTerm}
           onToggleMobileMenu={() => setMobileMenuOpen(true)}
-          activePlatformRole={activePlatformRole}
-          onPlatformRoleChange={setActivePlatformRole}
           unreadNotificationsCount={notifications.length}
           onOpenNotifications={() => handleSelectTab('notifications')}
           actionButton={
@@ -347,7 +381,7 @@ export const SuperAdminDashboard: React.FC = () => {
               type="button"
               onClick={loadAllData}
               disabled={loading}
-              className="p-1.5 rounded-xl border border-[#E6F1F5] hover:bg-[#F1F9FC] text-[#673AB7] cursor-pointer"
+              className="p-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-indigo-600 cursor-pointer"
               title="Refresh Live Data"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -356,7 +390,7 @@ export const SuperAdminDashboard: React.FC = () => {
         />
 
         {/* Tab Body */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-[#FFFFFF] scrollbar-thin">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-[#F8FAFC] scrollbar-thin">
           <div className="w-full">
             {currentTab === 'dashboard' && (
               <OverviewSection
@@ -376,12 +410,30 @@ export const SuperAdminDashboard: React.FC = () => {
 
 
 
-            {currentTab === 'subscriptions' && (
+            {(currentTab === 'subscriptions' ||
+              currentTab === 'subscription-tiers' ||
+              currentTab === 'assign-plan') && (
               <SubscriptionsSection
                 plans={plans}
                 societySubscriptions={societySubs}
                 societies={societies}
                 onRefresh={loadAllData}
+                initialSubTab={
+                  currentTab === 'subscription-tiers'
+                    ? 'PLANS'
+                    : currentTab === 'assign-plan'
+                    ? 'ASSIGN'
+                    : 'ASSIGNED'
+                }
+                onSubTabChange={(subTab) =>
+                  handleSelectTab(
+                    subTab === 'PLANS'
+                      ? 'subscription-tiers'
+                      : subTab === 'ASSIGN'
+                      ? 'assign-plan'
+                      : 'subscriptions'
+                  )
+                }
               />
             )}
 
@@ -412,20 +464,42 @@ export const SuperAdminDashboard: React.FC = () => {
               />
             )}
 
+            {currentTab === 'directory' && (
+              <DirectorySection
+                societyAdmins={societyAdmins}
+                residents={residents}
+                guards={guards}
+                societies={societies}
+                onRefresh={loadAllData}
+              />
+            )}
+
             {currentTab === 'users' && (
               <GlobalUsersSection
                 users={globalUsers}
+                societies={societies}
                 onRefresh={loadAllData}
               />
             )}
 
             {currentTab === 'roles' && (
-              <RolesPermissionsSection />
+              <RolesPermissionsSection
+                isSuperAdmin={
+                  activePlatformRole === 'SUPER_ADMIN' &&
+                  Boolean(
+                    user?.isSuperAdmin ||
+                      user?.primaryRole === 'SUPER_ADMIN' ||
+                      user?.role === 'SUPER_ADMIN'
+                  )
+                }
+                actorEmail={user?.email || undefined}
+              />
             )}
 
             {currentTab === 'emergency' && (
               <EmergencyMonitoringSection
                 incidents={emergencyIncidents}
+                societies={societies}
                 onRefresh={loadAllData}
               />
             )}
@@ -433,6 +507,7 @@ export const SuperAdminDashboard: React.FC = () => {
             {currentTab === 'support' && (
               <SupportTicketsSection
                 tickets={tickets}
+                societies={societies}
                 onRefresh={loadAllData}
               />
             )}
@@ -446,7 +521,16 @@ export const SuperAdminDashboard: React.FC = () => {
             )}
 
             {currentTab === 'reports' && (
-              <ReportsSection societies={societies} />
+              <ReportsSection
+                societies={societies}
+                transactions={transactions}
+                societySubs={societySubs}
+                partners={partners}
+                guards={guards}
+                residents={residents}
+                globalUsers={globalUsers}
+                tickets={tickets}
+              />
             )}
 
             {currentTab === 'feature-flags' && (

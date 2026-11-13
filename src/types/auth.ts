@@ -5,7 +5,9 @@
 
 export type UserRole =
   | 'SUPER_ADMIN'
+  | 'PLATFORM_STAFF'
   | 'SOCIETY_ADMIN'
+  | 'SOCIETY_STAFF'
   | 'SECURITY_GUARD'
   | 'RESIDENT'
   | 'SERVICE_PARTNER';
@@ -46,11 +48,20 @@ export interface UserProfile {
   isSuperAdmin?: boolean;
   societyName?: string; // Compatibility alias
   societyId?: string; // Compatibility alias
+  societyCode?: string;
   flatNumber?: string; // Compatibility alias
   block?: string; // Compatibility alias
   buildingName?: string; // Compatibility alias
   partnerCompany?: string; // Compatibility alias
   partnerId?: string; // Compatibility alias
+  platformRole?: string;
+  platformDepartment?: string;
+  platformPermissions?: string[];
+  platformStaffId?: string;
+  societyStaffId?: string;
+  societyStaffRole?: string;
+  societyDepartment?: string;
+  societyPermissions?: string[];
 }
 
 export interface SocietyMembership {

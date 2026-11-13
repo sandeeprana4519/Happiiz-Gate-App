@@ -24,6 +24,8 @@ import { SocietyAdminDashboard } from '../pages/dashboards/SocietyAdminDashboard
 import { SecurityGuardDashboard } from '../pages/dashboards/SecurityGuardDashboard';
 import { ResidentDashboard } from '../pages/dashboards/ResidentDashboard';
 import { ServicePartnerDashboard } from '../pages/dashboards/ServicePartnerDashboard';
+import { PlatformStaffDashboard } from '../pages/dashboards/PlatformStaffDashboard';
+import { SocietyStaffDashboard } from '../pages/dashboards/SocietyStaffDashboard';
 import { NotFoundPage } from '../pages/notFound/NotFoundPage';
 import { ProtectedRoute } from './ProtectedRoute';
 
@@ -98,6 +100,30 @@ export const AppRoutes: React.FC = () => {
           }
         />
 
+        {/* Role-Protected Society Staff Workspace (Strictly Isolated to Assigned Society & Permissions) */}
+        <Route
+          path="/dashboard/society-staff"
+          element={
+            <ProtectedRoute
+              allowedRoles={['SOCIETY_STAFF']}
+              requireActiveMembership={true}
+            >
+              <SocietyStaffDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/society-staff/*"
+          element={
+            <ProtectedRoute
+              allowedRoles={['SOCIETY_STAFF']}
+              requireActiveMembership={true}
+            >
+              <SocietyStaffDashboard />
+            </ProtectedRoute>
+          }
+        />
+
         {/* Role-Protected Service Partner Hub */}
         <Route
           path="/dashboard/service-partner"
@@ -108,9 +134,35 @@ export const AppRoutes: React.FC = () => {
           }
         />
 
+        {/* Role-Protected Platform Staff Operations Portal */}
+        <Route
+          path="/dashboard/platform-staff"
+          element={
+            <ProtectedRoute allowedRoles={['PLATFORM_STAFF', 'SUPER_ADMIN']}>
+              <PlatformStaffDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/staff/*"
+          element={
+            <ProtectedRoute allowedRoles={['PLATFORM_STAFF', 'SUPER_ADMIN']}>
+              <PlatformStaffDashboard />
+            </ProtectedRoute>
+          }
+        />
+
         {/* Role-Protected Super Admin Console */}
         <Route
           path="/dashboard/super-admin"
+          element={
+            <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
+              <SuperAdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/*"
           element={
             <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
               <SuperAdminDashboard />

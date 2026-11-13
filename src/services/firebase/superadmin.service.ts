@@ -2091,6 +2091,7 @@ const DEFAULT_PLATFORM_STAFF: PlatformStaffMember[] = [
     uid: 'usr_sa_priya',
     fullName: 'Priya Iyer',
     email: 'priya.iyer@happiiz.com',
+    password: 'Happiiz@2026',
     phoneNumber: '+91 98450 44332',
     role: 'PLATFORM_ADMIN',
     department: 'Operations',
@@ -2104,6 +2105,7 @@ const DEFAULT_PLATFORM_STAFF: PlatformStaffMember[] = [
     uid: 'usr_sa_manish',
     fullName: 'Manish Verma',
     email: 'manish.v@happiiz.com',
+    password: 'Happiiz@2026',
     phoneNumber: '+91 98200 99881',
     role: 'PLATFORM_FINANCE',
     department: 'Finance',
@@ -2117,6 +2119,7 @@ const DEFAULT_PLATFORM_STAFF: PlatformStaffMember[] = [
     uid: 'usr_sa_shweta',
     fullName: 'Shweta Deshmukh',
     email: 'shweta.d@happiiz.com',
+    password: 'Happiiz@2026',
     phoneNumber: '+91 97400 22119',
     role: 'PLATFORM_SUPPORT',
     department: 'Support',
@@ -2127,28 +2130,149 @@ const DEFAULT_PLATFORM_STAFF: PlatformStaffMember[] = [
   },
 ];
 
+function syncPlatformStaffAccount(staff: PlatformStaffMember, password?: string): void {
+  try {
+    const normalizedEmail = staff.email?.trim().toLowerCase();
+    if (!normalizedEmail) return;
+
+    const rawAccounts = localStorage.getItem('happiiz_user_accounts');
+    const accounts: UserProfile[] = rawAccounts ? JSON.parse(rawAccounts) : [];
+    const existingIdx = accounts.findIndex(
+      (a) => a.uid === staff.uid || (a.email && a.email.toLowerCase() === normalizedEmail)
+    );
+
+    const isRoot = staff.role === 'SUPER_ADMIN';
+    const staffProfile: UserProfile = {
+      uid: staff.uid,
+      fullName: staff.fullName,
+      displayName: staff.fullName,
+      email: normalizedEmail,
+      phoneNumber: staff.phoneNumber || '+91 98000 00000',
+      preferredLanguage: 'en',
+      accountStatus: staff.status === 'ACTIVE' ? 'ACTIVE' : 'SUSPENDED',
+      createdAt: staff.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      lastLoginAt: staff.lastLogin || new Date().toISOString(),
+      onboardingCompleted: true,
+      isSuperAdmin: isRoot,
+      primaryRole: isRoot ? 'SUPER_ADMIN' : 'PLATFORM_STAFF',
+      role: isRoot ? 'SUPER_ADMIN' : 'PLATFORM_STAFF',
+      platformRole: staff.role,
+      platformDepartment: staff.department,
+      platformPermissions: staff.permissions,
+      platformStaffId: staff.id,
+    };
+
+    if (existingIdx >= 0) {
+      accounts[existingIdx] = { ...accounts[existingIdx], ...staffProfile };
+    } else {
+      accounts.push(staffProfile);
+    }
+    localStorage.setItem('happiiz_user_accounts', JSON.stringify(accounts));
+
+    const effectivePassword = password || staff.password;
+    if (effectivePassword) {
+      setUserStoredPassword(staff.uid, effectivePassword);
+    }
+  } catch (err) {
+    console.warn('[superadmin.service] Could not sync platform staff account:', err);
+  }
+}
+
 export async function getPlatformStaff(): Promise<PlatformStaffMember[]> {
   return getStoredArray<PlatformStaffMember>('happiiz_sa_staff', DEFAULT_PLATFORM_STAFF);
 }
 
-export async function addPlatformStaff(member: Partial<PlatformStaffMember>): Promise<PlatformStaffMember> {
+export async function addPlatformStaff(
+  member: Partial<PlatformStaffMember> & { password?: string }
+): Promise<PlatformStaffMember> {
   const current = await getPlatformStaff();
+  const normalizedEmail = (member.email || '').trim().toLowerCase();
+  if (!normalizedEmail) {
+    throw new Error('Staff login email is required.');
+  }
+
+  const duplicate = current.find(
+    (s) => s.email && s.email.trim().toLowerCase() === normalizedEmail
+  );
+  if (duplicate) {
+    throw new Error(`A staff account with email "${normalizedEmail}" already exists.`);
+  }
+
+  const staffPassword = (member.password || '').trim();
+  if (!staffPassword || staffPassword.length < 6) {
+    throw new Error('A login password of at least 6 characters is required for the staff portal.');
+  }
+
+  const now = new Date().toISOString();
   const newStaff: PlatformStaffMember = {
     id: `stf_sa_${Date.now()}`,
-    uid: `usr_staff_${Date.now()}`,
-    email: member.email || 'staff@happiiz.com',
-    fullName: member.fullName || 'New Platform Executive',
-    phoneNumber: member.phoneNumber || '+91 98000 00000',
+    uid: `usr_staff_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    email: normalizedEmail,
+    password: staffPassword,
+    fullName: (member.fullName || 'New Platform Executive').trim(),
+    phoneNumber: (member.phoneNumber || '+91 98000 00000').trim(),
     role: member.role || 'PLATFORM_OPERATIONS',
     department: member.department || 'Operations',
     status: 'ACTIVE',
-    permissions: member.permissions || ['society.read', 'support.manage'],
-    createdAt: new Date().toISOString(),
+    permissions: member.permissions && member.permissions.length > 0 ? member.permissions : ['society.read'],
+    createdAt: now,
+    updatedAt: now,
   };
 
   setStoredArray('happiiz_sa_staff', [newStaff, ...current]);
-  await recordAuditLog('ADD_PLATFORM_STAFF', newStaff.id, 'USER', `Provisioned platform staff: ${newStaff.fullName} (${newStaff.role})`);
+  syncPlatformStaffAccount(newStaff, staffPassword);
+  await recordAuditLog(
+    'ADD_PLATFORM_STAFF',
+    newStaff.id,
+    'USER',
+    `Provisioned platform staff: ${newStaff.fullName} (${newStaff.email}) with role ${newStaff.role} & ${newStaff.permissions.length} permissions`
+  );
   return newStaff;
+}
+
+export async function updatePlatformStaff(
+  staffId: string,
+  updates: Partial<PlatformStaffMember> & { password?: string }
+): Promise<PlatformStaffMember | null> {
+  const list = await getPlatformStaff();
+  let updatedStaff: PlatformStaffMember | null = null;
+
+  const updatedList = list.map((s) => {
+    if (s.id !== staffId) return s;
+    const nextEmail = updates.email ? updates.email.trim().toLowerCase() : s.email;
+    const nextPassword =
+      updates.password && updates.password.trim().length >= 6
+        ? updates.password.trim()
+        : s.password;
+    updatedStaff = {
+      ...s,
+      ...updates,
+      email: nextEmail,
+      password: nextPassword,
+      updatedAt: new Date().toISOString(),
+    };
+    return updatedStaff;
+  });
+
+  if (!updatedStaff) return null;
+
+  setStoredArray('happiiz_sa_staff', updatedList);
+  syncPlatformStaffAccount(updatedStaff, (updatedStaff as PlatformStaffMember).password);
+  await recordAuditLog(
+    'UPDATE_PLATFORM_STAFF',
+    staffId,
+    'USER',
+    `Super Admin updated permissions/credentials for ${(updatedStaff as PlatformStaffMember).fullName} (${(updatedStaff as PlatformStaffMember).role})`
+  );
+  syncBus.broadcast(
+    'ROLE_PERMISSIONS_UPDATED',
+    'all',
+    auth?.currentUser?.uid || 'super_admin',
+    'SUPER_ADMIN',
+    { scope: 'PLATFORM_STAFF', staffId }
+  );
+  return updatedStaff;
 }
 
 export async function updatePlatformStaffStatus(
@@ -2156,9 +2280,40 @@ export async function updatePlatformStaffStatus(
   newStatus: 'ACTIVE' | 'INACTIVE'
 ): Promise<boolean> {
   const list = await getPlatformStaff();
-  const updated = list.map((s) => (s.id === staffId ? { ...s, status: newStatus } : s));
+  let targetStaff: PlatformStaffMember | null = null;
+  const updated = list.map((s) => {
+    if (s.id !== staffId) return s;
+    targetStaff = { ...s, status: newStatus, updatedAt: new Date().toISOString() };
+    return targetStaff;
+  });
   setStoredArray('happiiz_sa_staff', updated);
+  if (targetStaff) {
+    syncPlatformStaffAccount(targetStaff);
+  }
   await recordAuditLog('UPDATE_STAFF_STATUS', staffId, 'USER', `Set staff status to ${newStatus}`);
+  return true;
+}
+
+export async function deletePlatformStaff(staffId: string): Promise<boolean> {
+  const list = await getPlatformStaff();
+  const target = list.find((s) => s.id === staffId);
+  if (!target || target.role === 'SUPER_ADMIN') return false;
+
+  const updated = list.filter((s) => s.id !== staffId);
+  setStoredArray('happiiz_sa_staff', updated);
+
+  try {
+    const rawAccounts = localStorage.getItem('happiiz_user_accounts');
+    if (rawAccounts) {
+      const accounts: UserProfile[] = JSON.parse(rawAccounts);
+      localStorage.setItem(
+        'happiiz_user_accounts',
+        JSON.stringify(accounts.filter((a) => a.uid !== target.uid))
+      );
+    }
+  } catch (_) {}
+
+  await recordAuditLog('DELETE_PLATFORM_STAFF', staffId, 'USER', `Removed platform staff ${target.fullName} (${target.email})`);
   return true;
 }
 
@@ -2175,4 +2330,192 @@ export async function superAdminLogin(email: string, pass: string, mfaCode?: str
   await recordAuditLog('SUPER_ADMIN_LOGIN_FAILURE', email, 'USER', 'Unauthorized access attempt to Super Admin Master Console');
   return { success: false, message: 'Unauthorized platform administrative credentials' };
 }
+
+// ==========================================
+// 23. SUPER ADMIN EXCLUSIVE ROLE PERMISSIONS & SERVICE VISIBILITY MATRIX
+// ==========================================
+export type ManagedRoleKey =
+  | 'SUPER_ADMIN'
+  | 'SOCIETY_ADMIN'
+  | 'SECURITY_GUARD'
+  | 'RESIDENT_OWNER'
+  | 'RESIDENT_TENANT'
+  | 'SERVICE_PARTNER';
+
+export interface RoleServicePermission {
+  id: string;
+  label: string;
+  category: 'PERMISSION' | 'SERVICE';
+  description: string;
+  enabled: boolean;
+  isCustom?: boolean;
+}
+
+export interface RolePermissionPolicy {
+  roleKey: ManagedRoleKey;
+  name: string;
+  subtitle: string;
+  tier: 'PLATFORM_ROOT' | 'TENANT_ADMIN' | 'SENTINEL' | 'OWNER' | 'TENANT' | 'VENDOR';
+  riskLevel: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  locked?: boolean;
+  updatedAt?: string;
+  updatedBy?: string;
+  items: RoleServicePermission[];
+}
+
+export const DEFAULT_ROLE_PERMISSION_POLICIES: RolePermissionPolicy[] = [
+  {
+    roleKey: 'SUPER_ADMIN',
+    name: 'Super Admin (Root Operator)',
+    subtitle: 'Exclusive platform owner controlling tenant provisioning, billing, and global role service visibility',
+    tier: 'PLATFORM_ROOT',
+    riskLevel: 'CRITICAL',
+    locked: true,
+    items: [
+      { id: 'sa_1', label: 'Provision & Suspend Tenant Societies / Companies', category: 'PERMISSION', description: 'Create, edit, suspend, or delete multi-tenant communities & campuses', enabled: true },
+      { id: 'sa_2', label: 'Exclusive RBAC & Service Visibility Control', category: 'PERMISSION', description: 'Show/hide services and edit capabilities for every platform role', enabled: true },
+      { id: 'sa_3', label: 'SaaS Subscription Tiers & Revenue Ledger', category: 'SERVICE', description: 'Configure pricing plans, invoices, and platform commission splits', enabled: true },
+      { id: 'sa_4', label: 'Global Emergency Sirens & Immutable Audit Logs', category: 'SERVICE', description: 'Monitor network SOS broadcasts and compliance logs', enabled: true },
+    ],
+  },
+  {
+    roleKey: 'SOCIETY_ADMIN',
+    name: 'Society Admin (Management Committee)',
+    subtitle: 'Authorized administrator managing an individual society or corporate campus',
+    tier: 'TENANT_ADMIN',
+    riskLevel: 'HIGH',
+    items: [
+      { id: 'soc_perm_res', label: 'Approve & Reject Resident Registrations', category: 'PERMISSION', description: 'Verify owner/tenant KYC and grant flat access', enabled: true },
+      { id: 'soc_perm_guard', label: 'Approve & Suspend Security Guards', category: 'PERMISSION', description: 'Onboard guards and assign checkpoint shifts', enabled: true },
+      { id: 'soc_srv_dues', label: 'Society Maintenance Dues & Billing', category: 'SERVICE', description: 'Generate monthly invoices and track resident payments', enabled: true },
+      { id: 'soc_srv_notices', label: 'Notice Board & Community Broadcasts', category: 'SERVICE', description: 'Publish society notices, circulars, and push alerts', enabled: true },
+      { id: 'soc_srv_helpdesk', label: 'Helpdesk & Complaint Resolution', category: 'SERVICE', description: 'View, assign, and close resident maintenance tickets', enabled: true },
+      { id: 'soc_srv_amenities', label: 'Clubhouse & Amenity Slot Management', category: 'SERVICE', description: 'Configure bookable facilities, slots, and rules', enabled: true },
+      { id: 'soc_srv_partners', label: 'Local Service Partners & Marketplace', category: 'SERVICE', description: 'Onboard local vendors and view mapped service partners', enabled: true },
+      { id: 'soc_srv_visitors', label: 'Visitor Logs & Gate Telemetry Reports', category: 'SERVICE', description: 'Inspect gate entry/exit history and export audit reports', enabled: true },
+      { id: 'soc_srv_sos', label: 'Society Emergency SOS Console', category: 'SERVICE', description: 'Respond to active fire, lift, and medical emergency alerts', enabled: true },
+    ],
+  },
+  {
+    roleKey: 'SECURITY_GUARD',
+    name: 'Gatekeeper (Security Guard)',
+    subtitle: 'Checkpoint operator handling physical visitor verification and gate safety',
+    tier: 'SENTINEL',
+    riskLevel: 'MEDIUM',
+    items: [
+      { id: 'grd_perm_passcode', label: '6-Digit Digital Keypad Passcode Verification', category: 'PERMISSION', description: 'Validate pre-approved guest, cab, and delivery passes', enabled: true },
+      { id: 'grd_perm_capture', label: 'Vehicle Plate & Visitor Photo Capture', category: 'PERMISSION', description: 'Record vehicle numbers and ID snapshots at entry gate', enabled: true },
+      { id: 'grd_srv_walkin', label: 'Walk-In Visitor & Resident Intercom Ring', category: 'SERVICE', description: 'Request live resident approval for unscheduled visitors', enabled: true },
+      { id: 'grd_srv_sos', label: 'Gate Panic SOS Emergency Broadcast', category: 'SERVICE', description: 'Trigger instant emergency sirens to admins and residents', enabled: true },
+      { id: 'grd_srv_dailyhelp', label: 'Daily Help & Staff Attendance Check-In', category: 'SERVICE', description: 'Log entry/exit of maids, drivers, and society staff', enabled: true },
+      { id: 'grd_srv_parcel', label: 'Parcel Locker & Courier Handover', category: 'SERVICE', description: 'Collect and notify residents of gate-dropped parcels', enabled: true },
+      { id: 'grd_srv_roster', label: 'Shift Roster & Patrol Logbook', category: 'SERVICE', description: 'View assigned gate shifts and patrol checkpoints', enabled: true },
+    ],
+  },
+  {
+    roleKey: 'RESIDENT_OWNER',
+    name: 'Resident Owner',
+    subtitle: 'Flat / Villa property owner with full household and committee services access',
+    tier: 'OWNER',
+    riskLevel: 'LOW',
+    items: [
+      { id: 'own_perm_preapprove', label: 'Pre-Approve Guest, Cab & Delivery Passes', category: 'PERMISSION', description: 'Generate instant 6-digit gate passcodes for visitors', enabled: true },
+      { id: 'own_perm_doorbell', label: 'Real-Time Gate Approval Prompts', category: 'PERMISSION', description: 'Approve or deny walk-in visitors directly from app', enabled: true },
+      { id: 'own_srv_dues', label: 'Maintenance Dues & Online Payment', category: 'SERVICE', description: 'View society maintenance bills and pay via UPI/Card', enabled: true },
+      { id: 'own_srv_amenities', label: 'Book Clubhouse & Society Amenities', category: 'SERVICE', description: 'Reserve gym, banquet hall, pool, and sports courts', enabled: true },
+      { id: 'own_srv_helpdesk', label: 'Raise Helpdesk & Maintenance Tickets', category: 'SERVICE', description: 'Log flat/common-area complaints with photo proof', enabled: true },
+      { id: 'own_srv_marketplace', label: 'Home Services Marketplace (Urban Co. Style)', category: 'SERVICE', description: 'Book plumbers, electricians, cleaning, and car wash', enabled: true },
+      { id: 'own_srv_community', label: 'Community Polls, Forum & Buy/Sell Wall', category: 'SERVICE', description: 'Participate in AGM voting, discussions, and classifieds', enabled: true },
+      { id: 'own_srv_household', label: 'Family Members, Vehicles & Daily Help Manager', category: 'SERVICE', description: 'Add family profiles, RFID vehicles, and domestic helpers', enabled: true },
+      { id: 'own_srv_sos', label: 'Emergency Panic SOS Button', category: 'SERVICE', description: 'Send one-tap SOS alerts to guards and family contacts', enabled: true },
+    ],
+  },
+  {
+    roleKey: 'RESIDENT_TENANT',
+    name: 'Tenant (Rental Occupant)',
+    subtitle: 'Verified tenant residing in a rented apartment with Super Admin controlled module access',
+    tier: 'TENANT',
+    riskLevel: 'LOW',
+    items: [
+      { id: 'ten_perm_preapprove', label: 'Pre-Approve Guest, Cab & Delivery Passes', category: 'PERMISSION', description: 'Generate instant 6-digit gate passcodes for visitors', enabled: true },
+      { id: 'ten_perm_doorbell', label: 'Real-Time Gate Approval Prompts', category: 'PERMISSION', description: 'Approve or deny walk-in visitors directly from app', enabled: true },
+      { id: 'ten_srv_dues', label: 'Utility & Maintenance Share Invoices', category: 'SERVICE', description: 'View and pay monthly tenant-applicable bills', enabled: true },
+      { id: 'ten_srv_amenities', label: 'Book Society Amenities & Facilities', category: 'SERVICE', description: 'Reserve clubhouse, gym, and sports facilities', enabled: true },
+      { id: 'ten_srv_helpdesk', label: 'Raise Flat Maintenance & Helpdesk Tickets', category: 'SERVICE', description: 'Submit repair and support requests for rented unit', enabled: true },
+      { id: 'ten_srv_marketplace', label: 'Home Services Marketplace', category: 'SERVICE', description: 'Book verified plumbers, cleaners, and appliance technicians', enabled: true },
+      { id: 'ten_srv_notices', label: 'Society Notices & Event Updates', category: 'SERVICE', description: 'View community circulars and announcements', enabled: true },
+      { id: 'ten_srv_polls', label: 'Owner AGM Voting & Governance Polls', category: 'SERVICE', description: 'Restrict or allow tenant participation in society polls', enabled: false },
+      { id: 'ten_srv_sos', label: 'Emergency Panic SOS Button', category: 'SERVICE', description: 'Send one-tap SOS alerts to security gate', enabled: true },
+    ],
+  },
+  {
+    roleKey: 'SERVICE_PARTNER',
+    name: 'Service Partner (Contractor / Technician)',
+    subtitle: 'Verified technician, contractor, or agency fulfilling community & home service bookings',
+    tier: 'VENDOR',
+    riskLevel: 'LOW',
+    items: [
+      { id: 'prt_perm_badge', label: 'Multi-Society Digital Entry Badge', category: 'PERMISSION', description: 'Scan QR / digital pass for verified gate check-in', enabled: true },
+      { id: 'prt_srv_bookings', label: 'Accept & Manage Service Work Orders', category: 'SERVICE', description: 'Receive live resident job bookings and update job status', enabled: true },
+      { id: 'prt_srv_ratecard', label: 'Custom Rate Card & Service Pricing', category: 'SERVICE', description: 'View or request updates to offered service rates', enabled: true },
+      { id: 'prt_srv_earnings', label: 'Earnings, Commission & Settlement Ledger', category: 'SERVICE', description: 'Track payouts, platform fees, and tax statements', enabled: true },
+      { id: 'prt_srv_ratings', label: 'Customer Ratings & Performance Reviews', category: 'SERVICE', description: 'View resident feedback and quality scorecards', enabled: true },
+      { id: 'prt_srv_support', label: 'Partner Helpdesk & SOS Safety Support', category: 'SERVICE', description: 'Raise payout queries or emergency support tickets', enabled: true },
+    ],
+  },
+];
+
+const ROLE_MATRIX_STORAGE_KEY = 'happiiz_sa_role_permissions_v2';
+
+export async function getRolePermissionMatrix(): Promise<RolePermissionPolicy[]> {
+  return getStoredArray<RolePermissionPolicy>(
+    ROLE_MATRIX_STORAGE_KEY,
+    DEFAULT_ROLE_PERMISSION_POLICIES
+  );
+}
+
+export async function saveRolePermissionMatrix(
+  policies: RolePermissionPolicy[],
+  actorEmail?: string
+): Promise<RolePermissionPolicy[]> {
+  const stamped = policies.map((p) => ({
+    ...p,
+    updatedAt: p.updatedAt || new Date().toISOString(),
+    updatedBy: actorEmail || 'Super Admin',
+  }));
+  setStoredArray(ROLE_MATRIX_STORAGE_KEY, stamped);
+  await recordAuditLog(
+    'UPDATE_ROLE_PERMISSIONS_MATRIX',
+    'rbac_matrix',
+    'ROLE_PERMISSION',
+    `Super Admin updated role permissions & service visibility (${stamped.length} role policies)`
+  );
+  syncBus.broadcast(
+    'ROLE_PERMISSIONS_UPDATED',
+    'all',
+    auth?.currentUser?.uid || 'super_admin',
+    'SUPER_ADMIN',
+    { scope: 'ROLE_PERMISSION_MATRIX', updatedAt: new Date().toISOString() }
+  );
+  return stamped;
+}
+
+export async function resetRolePermissionMatrix(): Promise<RolePermissionPolicy[]> {
+  setStoredArray(ROLE_MATRIX_STORAGE_KEY, DEFAULT_ROLE_PERMISSION_POLICIES);
+  await recordAuditLog(
+    'RESET_ROLE_PERMISSIONS_MATRIX',
+    'rbac_matrix',
+    'ROLE_PERMISSION',
+    'Super Admin reset role permissions & service visibility matrix to factory defaults'
+  );
+  syncBus.broadcast(
+    'ROLE_PERMISSIONS_UPDATED',
+    'all',
+    auth?.currentUser?.uid || 'super_admin',
+    'SUPER_ADMIN',
+    { scope: 'ROLE_PERMISSION_MATRIX', reset: true, updatedAt: new Date().toISOString() }
+  );
+  return DEFAULT_ROLE_PERMISSION_POLICIES;
+}
+
 

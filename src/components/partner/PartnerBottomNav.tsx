@@ -4,12 +4,12 @@
  */
 
 import React from 'react';
-import { 
-  Home, 
-  Briefcase, 
-  Calendar, 
-  Wallet, 
-  User 
+import {
+  Home,
+  Briefcase,
+  Calendar,
+  Wallet,
+  User,
 } from 'lucide-react';
 
 export type PartnerTab = 'home' | 'bookings' | 'calendar' | 'earnings' | 'profile';
@@ -36,7 +36,7 @@ export const PartnerBottomNav: React.FC<PartnerBottomNavProps> = ({
   return (
     <nav
       aria-label="Service Partner Mobile Navigation"
-      className="fixed bottom-0 left-0 right-0 z-40 bg-[#000000] border-t border-slate-900 shadow-[0_-4px_25px_rgba(0,0,0,0.6)] max-w-lg mx-auto w-full select-none pb-safe"
+      className="fixed bottom-0 left-0 right-0 z-40 bg-[#0F172A]/95 backdrop-blur-lg border-t border-slate-800 shadow-[0_-6px_24px_rgba(15,23,42,0.35)] max-w-lg mx-auto w-full select-none pb-safe"
     >
       <div className="grid grid-cols-5 h-16 sm:h-18 items-center px-1 sm:px-2 relative w-full">
         {tabs.map((tab) => {
@@ -49,31 +49,31 @@ export const PartnerBottomNav: React.FC<PartnerBottomNavProps> = ({
               type="button"
               onClick={() => onTabChange(tab.id)}
               className={`flex flex-col items-center justify-center py-1 transition-colors relative cursor-pointer group active:scale-95 ${
-                isActive ? 'text-white font-bold' : 'text-[#9DA3AD] hover:text-white'
+                isActive ? 'text-white font-bold' : 'text-slate-400 hover:text-slate-200'
               }`}
               aria-label={tab.label}
             >
               <div className="relative">
                 <Icon
                   className={`w-5 h-5 transition-transform group-hover:scale-110 ${
-                    isActive ? 'stroke-[2.5] text-white scale-110' : 'stroke-[1.8] text-[#9DA3AD]'
+                    isActive ? 'stroke-[2.5] text-sky-400 scale-110' : 'stroke-[1.8] text-slate-400'
                   }`}
                 />
                 {tab.badge !== undefined && tab.badge > 0 && (
-                  <span className="absolute -top-1.5 -right-2.5 min-w-[16px] h-4 px-1 rounded-full bg-[#E53945] text-white text-[9px] font-extrabold flex items-center justify-center ring-2 ring-black animate-pulse shadow-sm">
+                  <span className="absolute -top-1.5 -right-2.5 min-w-[16px] h-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-extrabold flex items-center justify-center ring-2 ring-[#0F172A] tabular-nums shadow-xs">
                     {tab.badge}
                   </span>
                 )}
               </div>
               <span
                 className={`text-[10px] mt-1 tracking-tight ${
-                  isActive ? 'text-white font-bold' : 'text-[#9DA3AD]'
+                  isActive ? 'text-white font-bold' : 'text-slate-400'
                 }`}
               >
                 {tab.label}
               </span>
               {isActive && (
-                <span className="w-4 h-0.5 bg-[#673AB7] rounded-full mt-0.5" />
+                <span className="w-5 h-0.5 bg-sky-400 rounded-full mt-0.5" />
               )}
             </button>
           );

@@ -2,6 +2,13 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+:root {
+  --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  --bg-main: #F8FAFC;
+  --text-primary: #0F172A;
+}
+
 @layer base {
   *, *::before, *::after {
     box-sizing: border-box;

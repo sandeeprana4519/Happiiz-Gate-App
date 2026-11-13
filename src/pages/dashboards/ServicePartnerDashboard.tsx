@@ -166,12 +166,15 @@ export const ServicePartnerDashboard: React.FC = () => {
     navigate('/login');
   };
 
+  // Payout Feedback State (avoids window.alert)
+  const [payoutNotice, setPayoutNotice] = useState<string | null>(null);
+
   if (!profile) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center p-6 text-center select-none">
+      <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center p-6 text-center select-none">
         <div className="space-y-3">
-          <Wrench className="w-10 h-10 text-[#673AB7] animate-spin mx-auto" />
-          <p className="font-extrabold text-sm text-[#111111]">Loading Service Partner Hub...</p>
+          <Wrench className="w-10 h-10 text-indigo-600 animate-spin mx-auto" />
+          <p className="font-extrabold text-sm text-slate-900">Loading Service Partner Hub...</p>
         </div>
       </div>
     );
@@ -181,7 +184,6 @@ export const ServicePartnerDashboard: React.FC = () => {
   const newRequests = bookings.filter((b) => b.status === 'REQUESTED');
   const acceptedBookings = bookings.filter((b) => b.status === 'ACCEPTED');
   const inProgressJobs = bookings.filter((b) => b.status === 'IN_PROGRESS');
-  const completedJobs = bookings.filter((b) => b.status === 'COMPLETED');
 
   const filteredBookings = bookings.filter((b) => {
     const matchesFilter = bookingFilter === 'ALL' || b.status === bookingFilter;
@@ -195,8 +197,8 @@ export const ServicePartnerDashboard: React.FC = () => {
   });
 
   return (
-    <div className="w-full max-w-full select-none relative font-sans antialiased min-h-screen pb-24 overflow-x-hidden bg-[#FFFFFF] text-[#111111] no-scrollbar">
-      {/* 1. MOBILE BLACK HEADER (Brand, Online Toggle, Three Dots Menu & Profile Card) */}
+    <div className="w-full max-w-full select-none relative font-sans antialiased min-h-screen pb-24 overflow-x-hidden bg-[#F8FAFC] text-slate-900 no-scrollbar">
+      {/* 1. MOBILE SAPPHIRE HEADER (Brand, Online Toggle, Three Dots Menu & Profile Card) */}
       <PartnerHeader
         profile={profile}
         onToggleOnline={handleToggleOnline}
@@ -208,12 +210,12 @@ export const ServicePartnerDashboard: React.FC = () => {
         newRequestsCount={newRequests.length}
       />
 
-      <main className="w-full max-w-lg mx-auto min-w-0 px-3 sm:px-4 pt-3 pb-6 space-y-4">
+      <main className="w-full max-w-lg mx-auto min-w-0 px-3 sm:px-4 pt-4 pb-6 space-y-5">
         {/* ======================================================== */}
         {/* TAB 1: HOME DASHBOARD */}
         {/* ======================================================== */}
         {activeTab === 'home' && (
-          <div className="space-y-4 animate-fade-in">
+          <div className="space-y-5 animate-fade-in">
             {/* NEW BOOKING REQUESTS ALERT BANNER */}
             {newRequests.length > 0 && (
               <div
@@ -221,40 +223,40 @@ export const ServicePartnerDashboard: React.FC = () => {
                   setBookingFilter('REQUESTED');
                   setActiveTab('bookings');
                 }}
-                className="p-3.5 rounded-2xl bg-amber-500 text-white shadow-md flex items-center justify-between cursor-pointer animate-pulse active:scale-98 transition"
+                className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md flex items-center justify-between cursor-pointer active:scale-98 transition"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <span className="w-2.5 h-2.5 rounded-full bg-white animate-ping shrink-0" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-white shrink-0" />
                   <div className="min-w-0">
-                    <h3 className="font-black text-xs sm:text-sm truncate">
+                    <h3 className="font-extrabold text-xs sm:text-sm truncate tabular-nums">
                       {newRequests.length} New Service Request{newRequests.length > 1 ? 's' : ''}!
                     </h3>
-                    <p className="text-[11px] text-amber-100 truncate">
-                      Tap to review customer problem & accept
+                    <p className="text-[11px] text-amber-50 truncate">
+                      Tap to review customer issue & accept job
                     </p>
                   </div>
                 </div>
-                <span className="px-3 py-1 rounded-xl bg-white text-amber-950 font-black text-xs shrink-0 shadow-xs">
+                <span className="px-3 py-1 rounded-xl bg-white text-amber-950 font-extrabold text-xs shrink-0 shadow-xs">
                   View
                 </span>
               </div>
             )}
 
-            {/* 8 DASHBOARD STATISTICS */}
-            <section className="space-y-2">
-              <h2 className="text-xs font-bold text-[#A9B0B8] uppercase tracking-wider">
+            {/* OPERATIONS & WORKLOAD KPI STRIP */}
+            <section className="space-y-2.5">
+              <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider px-0.5">
                 Operations & Workload Overview
               </h2>
-              <div className="grid grid-cols-4 gap-1.5 sm:gap-2 text-center text-xs">
+              <div className="grid grid-cols-4 gap-2 text-center text-xs">
                 <div
                   onClick={() => {
                     setBookingFilter('REQUESTED');
                     setActiveTab('bookings');
                   }}
-                  className="py-2.5 px-1 sm:px-2 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] cursor-pointer hover:border-[#673AB7] transition-all min-w-0 flex flex-col items-center justify-center shadow-2xs active:scale-95"
+                  className="py-3 px-1.5 rounded-2xl bg-white border border-amber-200/80 cursor-pointer hover:border-amber-400 transition-all min-w-0 flex flex-col items-center justify-center shadow-xs active:scale-95"
                 >
-                  <p className="text-base sm:text-lg font-black text-amber-600 leading-tight">{newRequests.length}</p>
-                  <p className="text-[10px] font-bold text-[#64748B] mt-1 truncate w-full">Requests</p>
+                  <p className="text-lg font-extrabold text-amber-600 leading-tight tabular-nums">{newRequests.length}</p>
+                  <p className="text-[10px] font-bold text-slate-600 mt-1 truncate w-full">Requests</p>
                 </div>
 
                 <div
@@ -262,10 +264,10 @@ export const ServicePartnerDashboard: React.FC = () => {
                     setBookingFilter('ACCEPTED');
                     setActiveTab('bookings');
                   }}
-                  className="py-2.5 px-1 sm:px-2 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] cursor-pointer hover:border-[#673AB7] transition-all min-w-0 flex flex-col items-center justify-center shadow-2xs active:scale-95"
+                  className="py-3 px-1.5 rounded-2xl bg-white border border-indigo-200/80 cursor-pointer hover:border-indigo-400 transition-all min-w-0 flex flex-col items-center justify-center shadow-xs active:scale-95"
                 >
-                  <p className="text-base sm:text-lg font-black text-[#673AB7] leading-tight">{acceptedBookings.length}</p>
-                  <p className="text-[10px] font-bold text-[#64748B] mt-1 truncate w-full">Accepted</p>
+                  <p className="text-lg font-extrabold text-indigo-600 leading-tight tabular-nums">{acceptedBookings.length}</p>
+                  <p className="text-[10px] font-bold text-slate-600 mt-1 truncate w-full">Accepted</p>
                 </div>
 
                 <div
@@ -273,30 +275,30 @@ export const ServicePartnerDashboard: React.FC = () => {
                     setBookingFilter('IN_PROGRESS');
                     setActiveTab('bookings');
                   }}
-                  className="py-2.5 px-1 sm:px-2 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] cursor-pointer hover:border-[#673AB7] transition-all min-w-0 flex flex-col items-center justify-center shadow-2xs active:scale-95"
+                  className="py-3 px-1.5 rounded-2xl bg-white border border-sky-200/80 cursor-pointer hover:border-sky-400 transition-all min-w-0 flex flex-col items-center justify-center shadow-xs active:scale-95"
                 >
-                  <p className="text-base sm:text-lg font-black text-blue-600 leading-tight">{inProgressJobs.length}</p>
-                  <p className="text-[10px] font-bold text-[#64748B] mt-1 truncate w-full">In Progress</p>
+                  <p className="text-lg font-extrabold text-sky-600 leading-tight tabular-nums">{inProgressJobs.length}</p>
+                  <p className="text-[10px] font-bold text-slate-600 mt-1 truncate w-full">In Progress</p>
                 </div>
 
                 <div
                   onClick={() => setActiveTab('earnings')}
-                  className="py-2.5 px-1 sm:px-2 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] cursor-pointer hover:border-[#673AB7] transition-all min-w-0 flex flex-col items-center justify-center shadow-2xs active:scale-95"
+                  className="py-3 px-1.5 rounded-2xl bg-white border border-emerald-200/80 cursor-pointer hover:border-emerald-400 transition-all min-w-0 flex flex-col items-center justify-center shadow-xs active:scale-95"
                 >
                   <p
-                    className="text-[11.5px] sm:text-sm font-black text-emerald-700 leading-tight truncate w-full tracking-tight"
+                    className="text-xs sm:text-sm font-extrabold text-emerald-700 leading-tight truncate w-full tracking-tight tabular-nums"
                     title={`₹${profile.totalEarnings.toLocaleString()}`}
                   >
                     ₹{profile.totalEarnings >= 100000 ? `${(profile.totalEarnings / 1000).toFixed(1)}k` : profile.totalEarnings.toLocaleString()}
                   </p>
-                  <p className="text-[10px] font-bold text-[#64748B] mt-1 truncate w-full">Earnings</p>
+                  <p className="text-[10px] font-bold text-slate-600 mt-1 truncate w-full">Earnings</p>
                 </div>
               </div>
             </section>
 
             {/* QUICK ACTIONS GRID */}
-            <section className="space-y-2">
-              <h2 className="text-xs font-bold text-[#64748B] uppercase tracking-wider px-0.5">
+            <section className="space-y-2.5">
+              <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider px-0.5">
                 Quick Actions
               </h2>
               <div className="grid grid-cols-2 gap-2.5">
@@ -306,56 +308,56 @@ export const ServicePartnerDashboard: React.FC = () => {
                     setBookingFilter('REQUESTED');
                     setActiveTab('bookings');
                   }}
-                  className="p-3 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] text-left hover:border-[#673AB7] transition-all cursor-pointer flex items-center gap-2.5 active:scale-95 shadow-2xs"
+                  className="p-3.5 rounded-2xl bg-white border border-slate-200/80 text-left hover:border-amber-300 transition-all cursor-pointer flex items-center gap-3 active:scale-95 shadow-xs"
                 >
-                  <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                  <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
                     <Briefcase className="w-4 h-4" />
                   </div>
                   <div className="min-w-0">
-                    <h4 className="font-extrabold text-xs text-[#111111] truncate">Bookings</h4>
-                    <p className="text-[10px] text-[#64748B] truncate">{newRequests.length} waiting</p>
+                    <h4 className="font-extrabold text-xs text-slate-900 truncate">Bookings</h4>
+                    <p className="text-[11px] text-slate-500 truncate tabular-nums">{newRequests.length} waiting</p>
                   </div>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setOpenTeamModal(true)}
-                  className="p-3 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] text-left hover:border-[#673AB7] transition-all cursor-pointer flex items-center gap-2.5 active:scale-95 shadow-2xs"
+                  className="p-3.5 rounded-2xl bg-white border border-slate-200/80 text-left hover:border-indigo-300 transition-all cursor-pointer flex items-center gap-3 active:scale-95 shadow-xs"
                 >
-                  <div className="w-9 h-9 rounded-xl bg-purple-100 text-[#673AB7] flex items-center justify-center shrink-0">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
                     <Users className="w-4 h-4" />
                   </div>
                   <div className="min-w-0">
-                    <h4 className="font-extrabold text-xs text-[#111111] truncate">Team Staff</h4>
-                    <p className="text-[10px] text-[#64748B] truncate">{technicians.length} field staff</p>
+                    <h4 className="font-extrabold text-xs text-slate-900 truncate">Team Staff</h4>
+                    <p className="text-[11px] text-slate-500 truncate tabular-nums">{technicians.length} field staff</p>
                   </div>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setOpenServicesModal(true)}
-                  className="p-3 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] text-left hover:border-[#673AB7] transition-all cursor-pointer flex items-center gap-2.5 active:scale-95 shadow-2xs"
+                  className="p-3.5 rounded-2xl bg-white border border-slate-200/80 text-left hover:border-sky-300 transition-all cursor-pointer flex items-center gap-3 active:scale-95 shadow-xs"
                 >
-                  <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
+                  <div className="w-10 h-10 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
                     <Wrench className="w-4 h-4" />
                   </div>
                   <div className="min-w-0">
-                    <h4 className="font-extrabold text-xs text-[#111111] truncate">Services & Rates</h4>
-                    <p className="text-[10px] text-[#64748B] truncate">{services.length} categories</p>
+                    <h4 className="font-extrabold text-xs text-slate-900 truncate">Services & Rates</h4>
+                    <p className="text-[11px] text-slate-500 truncate tabular-nums">{services.length} categories</p>
                   </div>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setOpenEarningsModal(true)}
-                  className="p-3 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] text-left hover:border-[#673AB7] transition-all cursor-pointer flex items-center gap-2.5 active:scale-95 shadow-2xs"
+                  className="p-3.5 rounded-2xl bg-white border border-slate-200/80 text-left hover:border-emerald-300 transition-all cursor-pointer flex items-center gap-3 active:scale-95 shadow-xs"
                 >
-                  <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
                     <Wallet className="w-4 h-4" />
                   </div>
                   <div className="min-w-0">
-                    <h4 className="font-extrabold text-xs text-[#111111] truncate">Wallet & Payout</h4>
-                    <p className="text-[10px] text-[#64748B] truncate">₹{profile.walletBalance} balance</p>
+                    <h4 className="font-extrabold text-xs text-slate-900 truncate">Wallet & Payout</h4>
+                    <p className="text-[11px] text-slate-500 truncate tabular-nums">₹{profile.walletBalance.toLocaleString()} balance</p>
                   </div>
                 </button>
               </div>
@@ -364,35 +366,36 @@ export const ServicePartnerDashboard: React.FC = () => {
             {/* RECENT WORK ORDERS STREAM */}
             <section className="space-y-3">
               <div className="flex items-center justify-between px-0.5">
-                <h3 className="text-xs font-bold text-[#64748B] uppercase tracking-wider">
+                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
                   Recent Society Work Orders
                 </h3>
-                <span
+                <button
+                  type="button"
                   onClick={() => setActiveTab('bookings')}
-                  className="text-[11px] font-bold text-[#673AB7] hover:underline cursor-pointer"
+                  className="text-xs font-bold text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer tabular-nums"
                 >
                   View All ({bookings.length})
-                </span>
+                </button>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 {bookings.slice(0, 3).map((b) => (
                   <div
                     key={b.id}
                     onClick={() => setSelectedBooking(b)}
-                    className="p-3 sm:p-3.5 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] flex items-center justify-between hover:border-[#673AB7] transition-all cursor-pointer active:scale-98"
+                    className="p-3.5 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex items-center justify-between hover:border-indigo-300 transition-all cursor-pointer active:scale-98"
                   >
-                    <div className="space-y-0.5 min-w-0 flex-1 pr-2">
+                    <div className="space-y-1 min-w-0 flex-1 pr-2">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <h4 className="font-extrabold text-xs sm:text-sm text-[#111111] truncate">{b.residentName}</h4>
-                        <span className="text-[9px] uppercase font-bold px-1.5 py-0.2 rounded-md bg-white text-[#673AB7] border border-[#E6F1F5] shrink-0">
+                        <h4 className="font-extrabold text-xs sm:text-sm text-slate-900 truncate">{b.residentName}</h4>
+                        <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200/60 shrink-0">
                           {b.category}
                         </span>
                       </div>
-                      <p className="text-[11px] text-[#64748B] truncate">
-                        Flat <strong className="text-[#111111]">{b.flatNumber}</strong> · {b.societyName}
+                      <p className="text-xs text-slate-600 truncate">
+                        Flat <strong className="text-slate-900">{b.flatNumber}</strong> · {b.societyName}
                       </p>
-                      <p className="text-[10px] text-[#A9B0B8] flex items-center gap-1 font-mono">
+                      <p className="text-[11px] text-slate-500 flex items-center gap-1.5 font-mono">
                         <Clock className="w-3 h-3 text-amber-500 shrink-0" />
                         <span>{b.scheduledTime}</span>
                       </p>
@@ -400,19 +403,19 @@ export const ServicePartnerDashboard: React.FC = () => {
 
                     <div className="flex items-center gap-1.5 shrink-0">
                       <span
-                        className={`px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-wider ${
+                        className={`px-2.5 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider ${
                           b.status === 'COMPLETED'
-                            ? 'bg-emerald-100 text-emerald-800'
+                            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200/70'
                             : b.status === 'IN_PROGRESS'
-                            ? 'bg-blue-100 text-blue-800'
+                            ? 'bg-sky-50 text-sky-800 border border-sky-200/70'
                             : b.status === 'ACCEPTED'
-                            ? 'bg-purple-100 text-purple-800'
-                            : 'bg-amber-100 text-amber-800'
+                            ? 'bg-indigo-50 text-indigo-800 border border-indigo-200/70'
+                            : 'bg-amber-50 text-amber-800 border border-amber-200/70'
                         }`}
                       >
                         {b.status}
                       </span>
-                      <ChevronRight className="w-4 h-4 text-[#A9B0B8]" />
+                      <ChevronRight className="w-4 h-4 text-slate-400" />
                     </div>
                   </div>
                 ))}
@@ -427,37 +430,37 @@ export const ServicePartnerDashboard: React.FC = () => {
         {activeTab === 'bookings' && (
           <div className="space-y-4 animate-fade-in">
             <div className="px-0.5">
-              <h2 className="text-base sm:text-lg font-black text-[#111111] tracking-tight">
+              <h2 className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight">
                 Work Orders & Bookings
               </h2>
-              <p className="text-[11px] sm:text-xs text-[#64748B] mt-0.5">
+              <p className="text-xs text-slate-500 mt-0.5">
                 Service visits for Emerald Heights residents (सोसायटी सेवा कार्य)
               </p>
             </div>
 
             {/* Search Input */}
             <div className="relative">
-              <Search className="absolute left-3 top-2.5 w-4 h-4 text-[#A9B0B8]" />
+              <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
               <input
                 type="text"
                 placeholder="Search by customer, flat, booking code..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-4 py-2.5 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] text-xs font-medium focus:outline-none focus:border-[#673AB7]"
+                className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-white border border-slate-200 text-xs font-medium text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 shadow-2xs"
               />
             </div>
 
-            {/* Filter Pills */}
-            <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar pb-1 -mx-0.5 px-0.5">
+            {/* Filter Tabs */}
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 -mx-0.5 px-0.5">
               {(['ALL', 'REQUESTED', 'ACCEPTED', 'IN_PROGRESS', 'COMPLETED'] as const).map((f) => (
                 <button
                   key={f}
                   type="button"
                   onClick={() => setBookingFilter(f)}
-                  className={`px-2 sm:px-3 py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all whitespace-nowrap shrink-0 cursor-pointer active:scale-95 ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 cursor-pointer active:scale-95 tabular-nums ${
                     bookingFilter === f
-                      ? 'bg-[#673AB7] text-white shadow-xs'
-                      : 'bg-[#F1F9FC] text-[#64748B] hover:bg-[#E6F1F5]'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
                   }`}
                 >
                   {f === 'ALL'
@@ -476,7 +479,7 @@ export const ServicePartnerDashboard: React.FC = () => {
             {/* Bookings Stream */}
             <div className="space-y-2.5">
               {filteredBookings.length === 0 ? (
-                <div className="p-8 text-center rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] text-xs text-[#A9B0B8]">
+                <div className="p-8 text-center rounded-2xl bg-white border border-slate-200/80 text-xs text-slate-500">
                   No bookings found under this filter.
                 </div>
               ) : (
@@ -484,43 +487,43 @@ export const ServicePartnerDashboard: React.FC = () => {
                   <div
                     key={b.id}
                     onClick={() => setSelectedBooking(b)}
-                    className="p-3.5 sm:p-4 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] space-y-2 hover:border-[#673AB7] transition-all cursor-pointer active:scale-98"
+                    className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs space-y-2.5 hover:border-indigo-300 transition-all cursor-pointer active:scale-98"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
-                          <span className="font-mono text-xs font-black text-[#673AB7]">
+                          <span className="font-mono text-xs font-extrabold text-indigo-700">
                             #{b.bookingCode}
                           </span>
-                          <span className="text-[9px] uppercase font-bold px-1.5 py-0.2 rounded-md bg-white text-[#673AB7] border border-[#E6F1F5]">
+                          <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200/60">
                             {b.category}
                           </span>
                         </div>
-                        <h4 className="font-extrabold text-xs sm:text-sm text-[#111111] mt-0.5 truncate">{b.residentName}</h4>
+                        <h4 className="font-extrabold text-sm text-slate-900 mt-1 truncate">{b.residentName}</h4>
                       </div>
 
                       <span
-                        className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full shrink-0 ${
+                        className={`text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-md shrink-0 ${
                           b.status === 'COMPLETED'
-                            ? 'bg-emerald-100 text-emerald-800'
+                            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200/70'
                             : b.status === 'IN_PROGRESS'
-                            ? 'bg-blue-100 text-blue-800'
+                            ? 'bg-sky-50 text-sky-800 border border-sky-200/70'
                             : b.status === 'ACCEPTED'
-                            ? 'bg-purple-100 text-purple-800'
-                            : 'bg-amber-100 text-amber-800'
+                            ? 'bg-indigo-50 text-indigo-800 border border-indigo-200/70'
+                            : 'bg-amber-50 text-amber-800 border border-amber-200/70'
                         }`}
                       >
                         {b.status}
                       </span>
                     </div>
 
-                    <p className="text-[11px] text-[#64748B] line-clamp-2">{b.problemDescription}</p>
+                    <p className="text-xs text-slate-600 line-clamp-2">{b.problemDescription}</p>
 
-                    <div className="flex items-center justify-between text-[11px] text-[#64748B] pt-2 border-t border-[#E6F1F5]">
+                    <div className="flex items-center justify-between text-xs text-slate-500 pt-2.5 border-t border-slate-100">
                       <span className="truncate">
-                        Flat <strong className="text-[#111111]">{b.flatNumber}</strong> · {b.scheduledTime}
+                        Flat <strong className="text-slate-900">{b.flatNumber}</strong> · {b.scheduledTime}
                       </span>
-                      <span className="font-black text-emerald-700 shrink-0">
+                      <span className="font-extrabold text-emerald-700 shrink-0 tabular-nums">
                         ₹{b.finalCost || b.estimatedCost}
                       </span>
                     </div>
@@ -537,10 +540,10 @@ export const ServicePartnerDashboard: React.FC = () => {
         {activeTab === 'calendar' && (
           <div className="space-y-4 animate-fade-in">
             <div className="px-0.5">
-              <h2 className="text-base sm:text-lg font-black text-[#111111] tracking-tight">
+              <h2 className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight">
                 Job Schedule & Calendar
               </h2>
-              <p className="text-[11px] sm:text-xs text-[#64748B] mt-0.5">
+              <p className="text-xs text-slate-500 mt-0.5">
                 Upcoming confirmed visits for your field staff
               </p>
             </div>
@@ -552,26 +555,29 @@ export const ServicePartnerDashboard: React.FC = () => {
                   <div
                     key={b.id}
                     onClick={() => setSelectedBooking(b)}
-                    className="p-3.5 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] flex items-center justify-between hover:border-[#673AB7] cursor-pointer active:scale-98 transition"
+                    className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex items-center justify-between hover:border-indigo-300 cursor-pointer active:scale-98 transition"
                   >
                     <div className="min-w-0 flex-1 pr-2">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-bold text-xs sm:text-sm text-[#111111]">{b.scheduledTime}</span>
-                        <span className="text-[9px] uppercase font-bold px-1.5 py-0.2 rounded-md bg-white text-[#673AB7] border border-[#E6F1F5]">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-xs sm:text-sm text-slate-900">{b.scheduledTime}</span>
+                        <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200/60">
                           {b.category}
                         </span>
                       </div>
-                      <p className="text-[11px] text-[#64748B] mt-0.5 truncate">
-                        {b.residentName} · Flat <strong className="text-[#111111]">{b.flatNumber}</strong>
+                      <p className="text-xs text-slate-600 mt-1 truncate">
+                        {b.residentName} · Flat <strong className="text-slate-900">{b.flatNumber}</strong>
                       </p>
                       {b.assignedTechnicianName && (
-                        <p className="text-[10px] font-bold text-[#673AB7] mt-0.5 truncate">
+                        <p className="text-[11px] font-bold text-indigo-700 mt-0.5 truncate">
                           Assigned: {b.assignedTechnicianName}
                         </p>
                       )}
                     </div>
 
-                    <button className="px-3 py-1.5 rounded-xl bg-[#673AB7] text-white text-xs font-bold hover:bg-[#512DA8] shrink-0">
+                    <button
+                      type="button"
+                      className="px-3.5 py-2 rounded-xl bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 shrink-0 shadow-xs"
+                    >
                       View Job
                     </button>
                   </div>
@@ -586,57 +592,73 @@ export const ServicePartnerDashboard: React.FC = () => {
         {activeTab === 'earnings' && (
           <div className="space-y-4 animate-fade-in">
             <div className="px-0.5">
-              <h2 className="text-base sm:text-lg font-black text-[#111111] tracking-tight">
+              <h2 className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight">
                 Earnings & Financial Ledger
               </h2>
-              <p className="text-[11px] sm:text-xs text-[#64748B] mt-0.5">
+              <p className="text-xs text-slate-500 mt-0.5">
                 Net earnings after 10% platform commission (कुल कमाई व वॉलेट)
               </p>
             </div>
 
-            {/* Big Wallet Card */}
-            <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-[#673AB7] to-[#512DA8] text-white flex items-center justify-between shadow-lg">
+            {payoutNotice && (
+              <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center justify-between gap-2">
+                <span>{payoutNotice}</span>
+                <button
+                  type="button"
+                  onClick={() => setPayoutNotice(null)}
+                  className="text-emerald-700 font-bold underline cursor-pointer shrink-0"
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
+
+            {/* Wallet Hero Card */}
+            <div className="p-5 rounded-3xl bg-gradient-to-br from-[#0F172A] via-[#1E293B] to-[#1E3A8A] text-white flex items-center justify-between shadow-lg">
               <div>
-                <p className="text-[11px] text-purple-200 uppercase font-semibold">Available Wallet Payout</p>
-                <p className="text-2xl sm:text-3xl font-black mt-0.5">₹{profile.walletBalance.toLocaleString()}</p>
-                <p className="text-[10px] text-purple-200 mt-1">
+                <p className="text-[11px] text-sky-200 uppercase font-bold tracking-wider">Available Wallet Payout</p>
+                <p className="text-2xl sm:text-3xl font-extrabold mt-1 tabular-nums">
+                  ₹{profile.walletBalance.toLocaleString()}
+                </p>
+                <p className="text-[11px] text-slate-300 mt-1">
                   Settles automatically to registered bank account
                 </p>
               </div>
               <button
-                onClick={() => alert('Withdrawal request queued! Funds will be deposited within 24 hours.')}
-                className="px-3.5 py-2 rounded-xl bg-white text-[#673AB7] font-black text-xs shadow-md hover:bg-purple-50 transition-colors cursor-pointer shrink-0"
+                type="button"
+                onClick={() => setPayoutNotice('Withdrawal request queued! Funds will be deposited within 24 hours.')}
+                className="px-4 py-2 rounded-xl bg-white text-slate-900 font-extrabold text-xs shadow-md hover:bg-sky-50 transition-colors cursor-pointer shrink-0"
               >
                 Withdraw
               </button>
             </div>
 
             {/* Payout Breakdown */}
-            <div className="p-3.5 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] space-y-2 text-xs">
+            <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs space-y-2.5 text-xs">
               <div className="flex justify-between">
-                <span className="text-[#64748B]">Total Completed Jobs:</span>
-                <span className="font-bold text-[#111111]">{profile.totalCompletedJobs} jobs</span>
+                <span className="text-slate-600">Total Completed Jobs</span>
+                <span className="font-bold text-slate-900 tabular-nums">{profile.totalCompletedJobs} jobs</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[#64748B]">Lifetime Net Earnings:</span>
-                <span className="font-black text-emerald-700">₹{profile.totalEarnings.toLocaleString()}</span>
+                <span className="text-slate-600">Lifetime Net Earnings</span>
+                <span className="font-extrabold text-emerald-700 tabular-nums">₹{profile.totalEarnings.toLocaleString()}</span>
               </div>
             </div>
 
             {/* Transactions Ledger */}
-            <div className="space-y-2">
-              <h4 className="font-bold text-xs text-[#111111] px-0.5">Settled Invoices</h4>
+            <div className="space-y-2.5">
+              <h4 className="font-extrabold text-xs text-slate-800 uppercase tracking-wider px-0.5">Settled Invoices</h4>
               {earnings.map((e) => (
                 <div
                   key={e.id}
-                  className="p-3 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] flex items-center justify-between"
+                  className="p-3.5 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex items-center justify-between"
                 >
                   <div>
-                    <p className="font-bold text-xs text-[#111111]">{e.residentName}</p>
-                    <p className="text-[10px] text-[#A9B0B8]">{e.serviceCategory} · Ref #{e.bookingCode}</p>
+                    <p className="font-bold text-xs text-slate-900">{e.residentName}</p>
+                    <p className="text-[11px] text-slate-500">{e.serviceCategory} · Ref #{e.bookingCode}</p>
                   </div>
-                  <div className="text-right">
-                    <p className="font-black text-xs text-emerald-700">+₹{e.netPayout}</p>
+                  <div className="text-right tabular-nums">
+                    <p className="font-extrabold text-xs text-emerald-700">+₹{e.netPayout}</p>
                     <p className="text-[10px] text-slate-400">Fee: ₹{e.platformFee}</p>
                   </div>
                 </div>
@@ -651,93 +673,101 @@ export const ServicePartnerDashboard: React.FC = () => {
         {activeTab === 'profile' && (
           <div className="space-y-4 animate-fade-in">
             <div className="px-0.5">
-              <h2 className="text-base sm:text-lg font-black text-[#111111] tracking-tight">
+              <h2 className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight">
                 Partner Profile & Settings
               </h2>
-              <p className="text-[11px] sm:text-xs text-[#64748B] mt-0.5">
+              <p className="text-xs text-slate-500 mt-0.5">
                 Business details, KYC compliance, and team management
               </p>
             </div>
 
             {/* Profile Summary Card */}
-            <div className="p-3.5 sm:p-4 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] flex items-center gap-3">
+            <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex items-center gap-3.5">
               <img
                 src={profile.photoUrl}
                 alt={profile.businessName}
-                className="w-14 h-14 rounded-2xl object-cover shrink-0"
+                className="w-14 h-14 rounded-2xl object-cover shrink-0 border border-slate-200"
               />
               <div className="min-w-0 flex-1">
-                <h3 className="font-black text-sm text-[#111111] truncate">{profile.businessName}</h3>
-                <p className="text-xs text-[#64748B] truncate">{profile.contactPersonName} · {profile.phoneNumber}</p>
-                <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                  <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px]">
+                <h3 className="font-extrabold text-sm text-slate-900 truncate">{profile.businessName}</h3>
+                <p className="text-xs text-slate-600 truncate">{profile.contactPersonName} · {profile.phoneNumber}</p>
+                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                  <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200/70 font-bold text-[10px]">
                     Verified Vendor
                   </span>
-                  <span className="text-[10px] text-[#A9B0B8]">ID: #{profile.partnerId}</span>
+                  <span className="text-[11px] text-slate-500 font-mono">ID: #{profile.partnerId}</span>
                 </div>
               </div>
             </div>
 
             {/* Settings Links */}
-            <div className="space-y-2">
+            <div className="space-y-2.5">
               <button
                 type="button"
                 onClick={() => setOpenKycModal(true)}
-                className="w-full p-4 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] flex items-center justify-between text-left hover:border-[#673AB7] transition-all cursor-pointer"
+                className="w-full p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex items-center justify-between text-left hover:border-emerald-300 transition-all cursor-pointer"
               >
                 <div className="flex items-center gap-3">
-                  <ShieldCheck className="w-5 h-5 text-emerald-600" />
+                  <span className="p-2 rounded-xl bg-emerald-50 text-emerald-600">
+                    <ShieldCheck className="w-5 h-5" />
+                  </span>
                   <div>
-                    <h4 className="font-bold text-xs text-[#111111]">KYC & Compliance Documents</h4>
-                    <p className="text-[10px] text-[#A9B0B8]">PAN, GSTIN, and Trade License verified</p>
+                    <h4 className="font-bold text-xs text-slate-900">KYC & Compliance Documents</h4>
+                    <p className="text-[11px] text-slate-500">PAN, GSTIN, and Trade License verified</p>
                   </div>
                 </div>
-                <ChevronRight className="w-4 h-4 text-[#A9B0B8]" />
+                <ChevronRight className="w-4 h-4 text-slate-400" />
               </button>
 
               <button
                 type="button"
                 onClick={() => setOpenTeamModal(true)}
-                className="w-full p-4 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] flex items-center justify-between text-left hover:border-[#673AB7] transition-all cursor-pointer"
+                className="w-full p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex items-center justify-between text-left hover:border-indigo-300 transition-all cursor-pointer"
               >
                 <div className="flex items-center gap-3">
-                  <Users className="w-5 h-5 text-[#673AB7]" />
+                  <span className="p-2 rounded-xl bg-indigo-50 text-indigo-600">
+                    <Users className="w-5 h-5" />
+                  </span>
                   <div>
-                    <h4 className="font-bold text-xs text-[#111111]">Technicians & Field Engineers</h4>
-                    <p className="text-[10px] text-[#A9B0B8]">{technicians.length} registered staff</p>
+                    <h4 className="font-bold text-xs text-slate-900">Technicians & Field Engineers</h4>
+                    <p className="text-[11px] text-slate-500 tabular-nums">{technicians.length} registered staff</p>
                   </div>
                 </div>
-                <ChevronRight className="w-4 h-4 text-[#A9B0B8]" />
+                <ChevronRight className="w-4 h-4 text-slate-400" />
               </button>
 
               <button
                 type="button"
                 onClick={() => setOpenServicesModal(true)}
-                className="w-full p-4 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] flex items-center justify-between text-left hover:border-[#673AB7] transition-all cursor-pointer"
+                className="w-full p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex items-center justify-between text-left hover:border-sky-300 transition-all cursor-pointer"
               >
                 <div className="flex items-center gap-3">
-                  <Wrench className="w-5 h-5 text-blue-600" />
+                  <span className="p-2 rounded-xl bg-sky-50 text-sky-600">
+                    <Wrench className="w-5 h-5" />
+                  </span>
                   <div>
-                    <h4 className="font-bold text-xs text-[#111111]">Manage Services & Pricing</h4>
-                    <p className="text-[10px] text-[#A9B0B8]">Base rates & inspection charges</p>
+                    <h4 className="font-bold text-xs text-slate-900">Manage Services & Pricing</h4>
+                    <p className="text-[11px] text-slate-500">Base rates & inspection charges</p>
                   </div>
                 </div>
-                <ChevronRight className="w-4 h-4 text-[#A9B0B8]" />
+                <ChevronRight className="w-4 h-4 text-slate-400" />
               </button>
 
               <button
                 type="button"
                 onClick={() => setOpenSupportModal(true)}
-                className="w-full p-4 rounded-2xl bg-[#F1F9FC] border border-[#E6F1F5] flex items-center justify-between text-left hover:border-[#673AB7] transition-all cursor-pointer"
+                className="w-full p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex items-center justify-between text-left hover:border-amber-300 transition-all cursor-pointer"
               >
                 <div className="flex items-center gap-3">
-                  <HelpCircle className="w-5 h-5 text-amber-600" />
+                  <span className="p-2 rounded-xl bg-amber-50 text-amber-600">
+                    <HelpCircle className="w-5 h-5" />
+                  </span>
                   <div>
-                    <h4 className="font-bold text-xs text-[#111111]">Support & Help Desk</h4>
-                    <p className="text-[10px] text-[#A9B0B8]">Contact platform administration</p>
+                    <h4 className="font-bold text-xs text-slate-900">Support & Help Desk</h4>
+                    <p className="text-[11px] text-slate-500">Contact platform administration</p>
                   </div>
                 </div>
-                <ChevronRight className="w-4 h-4 text-[#A9B0B8]" />
+                <ChevronRight className="w-4 h-4 text-slate-400" />
               </button>
             </div>
           </div>

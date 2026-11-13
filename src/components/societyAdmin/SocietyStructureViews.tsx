@@ -25,6 +25,15 @@ import { SocietyBuilding, SocietyFlat, FlatType, FlatOccupancyStatus } from '../
 import { Society, EntityDocument } from '../../types/society';
 import { useAuth } from '../../context/AuthContext';
 import { updateUserAccountPassword } from '../../services/firebase/auth.service';
+import { SocietyPdfExportToolbar } from './SocietyPdfExportToolbar';
+import {
+  SocietyPeriodMode,
+  matchesSocietyPeriod,
+  buildSocietyPeriodLabel,
+  buildSocietySlug,
+  exportSocietyPdf,
+  normalizeSocietyIsoDate,
+} from './societyPdfExportUtils';
 
 interface SocietyStructureProps {
   society: Society;
@@ -753,6 +762,10 @@ export const SocietyFlatsView: React.FC<SocietyStructureProps> = ({
   const [filterBuilding, setFilterBuilding] = useState<string>('ALL');
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
+  const [periodMode, setPeriodMode] = useState<SocietyPeriodMode>('ALL');
+  const [dayValue, setDayValue] = useState<string>(() => new Date().toISOString().slice(0, 10));
+  const [monthValue, setMonthValue] = useState<string>(() => new Date().toISOString().slice(0, 7));
+  const [yearValue, setYearValue] = useState<string>(() => new Date().toISOString().slice(0, 4));
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingFlat, setEditingFlat] = useState<SocietyFlat | null>(null);
 
@@ -771,12 +784,68 @@ export const SocietyFlatsView: React.FC<SocietyStructureProps> = ({
   const filteredFlats = flats.filter((f) => {
     const matchBuilding = filterBuilding === 'ALL' || f.buildingName === filterBuilding;
     const matchStatus = filterStatus === 'ALL' || f.occupancyStatus === filterStatus;
-    const matchSearch = searchTerm === '' || 
+    const matchSearch =
+      searchTerm === '' ||
       f.flatNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (f.ownerName && f.ownerName.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (f.tenantName && f.tenantName.toLowerCase().includes(searchTerm.toLowerCase()));
-    return matchBuilding && matchStatus && matchSearch;
+    const matchPeriod = matchesSocietyPeriod(
+      f.updatedAt || (f as any).createdAt,
+      periodMode,
+      dayValue,
+      monthValue,
+      yearValue
+    );
+    return matchBuilding && matchStatus && matchSearch && matchPeriod;
   });
+
+  const handleDownloadFlatsPdf = () => {
+    const period = buildSocietyPeriodLabel(periodMode, dayValue, monthValue, yearValue);
+    const socSlug = buildSocietySlug(society);
+    const columns = [
+      'Flat No',
+      'Tower / Block',
+      'Floor',
+      'Unit Type',
+      'Occupancy',
+      'Owner Name',
+      'Owner Phone',
+      'Tenant Name',
+      'Tenant Phone',
+      'Area (Sq Ft)',
+      'Parking Slot',
+      'Last Updated',
+    ];
+    const rows = filteredFlats.map((f) => ({
+      'Flat No': f.flatNumber,
+      'Tower / Block': f.buildingName,
+      Floor: `Floor ${f.floor}`,
+      'Unit Type': f.flatType,
+      Occupancy: f.occupancyStatus.replace(/_/g, ' '),
+      'Owner Name': f.ownerName || 'Unassigned',
+      'Owner Phone': f.ownerPhone || '—',
+      'Tenant Name': f.tenantName || '—',
+      'Tenant Phone': f.tenantPhone || '—',
+      'Area (Sq Ft)': f.squareFeet ? `${f.squareFeet} sq.ft` : '—',
+      'Parking Slot': f.parkingSlotNumber || '—',
+      'Last Updated': normalizeSocietyIsoDate(f.updatedAt || (f as any).createdAt) || '—',
+    }));
+
+    const searchPart = searchTerm.trim() ? ` | Search: "${searchTerm.trim()}"` : '';
+    const filterSummary = `Period: ${period.label} | Tower: ${
+      filterBuilding === 'ALL' ? 'All Towers' : filterBuilding
+    } | Status: ${filterStatus === 'ALL' ? 'All' : filterStatus}${searchPart} | Units: ${rows.length}`;
+
+    exportSocietyPdf({
+      society,
+      title: 'Flat Inventory & Units Report',
+      subtitle: 'Physical Structure • Residential Unit Directory & Occupancy Roster',
+      filename: `${socSlug}_flat_inventory_${period.slug}`,
+      columns,
+      rows,
+      filterSummary,
+    });
+  };
 
   const handleOpenAdd = () => {
     setEditingFlat(null);
@@ -872,7 +941,7 @@ export const SocietyFlatsView: React.FC<SocietyStructureProps> = ({
             placeholder="Search flat, owner or tenant..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 bg-[#F1F9FC] rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#673AB7]"
+            className="w-full pl-9 pr-4 py-2 bg-[#F1F9FC] rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
           />
         </div>
 
@@ -899,11 +968,27 @@ export const SocietyFlatsView: React.FC<SocietyStructureProps> = ({
             <option value="UNDER_MAINTENANCE">Under Maintenance</option>
           </select>
 
-          <span className="text-xs text-gray-500 ml-auto md:ml-0 font-medium">
+          <span className="text-xs text-gray-500 ml-auto md:ml-0 font-medium tabular-nums">
             Showing {filteredFlats.length} of {flats.length}
           </span>
         </div>
       </div>
+
+      {/* PDF Export Toolbar (Day-wise, Month-wise, Year-wise, All Time) */}
+      <SocietyPdfExportToolbar
+        periodMode={periodMode}
+        onPeriodModeChange={setPeriodMode}
+        dayValue={dayValue}
+        onDayValueChange={setDayValue}
+        monthValue={monthValue}
+        onMonthValueChange={setMonthValue}
+        yearValue={yearValue}
+        onYearValueChange={setYearValue}
+        matchedCount={filteredFlats.length}
+        onExportPdf={handleDownloadFlatsPdf}
+        pdfButtonLabel="Download Flat Inventory PDF"
+        onResetPeriod={() => setPeriodMode('ALL')}
+      />
 
       {/* Flats Table */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">

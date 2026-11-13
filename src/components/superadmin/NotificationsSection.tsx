@@ -3,21 +3,26 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { PlatformNotification } from '../../types/admin';
 import { Society } from '../../types/society';
 import { dispatchPlatformNotification } from '../../services/firebase/superadmin.service';
 import {
-  Bell,
   Send,
   Radio,
-  Clock,
   CheckCircle2,
-  Users,
-  Building2,
-  ShieldAlert,
-  Calendar,
+  Search,
 } from 'lucide-react';
+import { OperationsExportToolbar } from './OperationsExportToolbar';
+import {
+  OperationsPeriodMode,
+  buildFilterSummaryText,
+  buildPeriodLabel,
+  exportOperationsPdf,
+  getSocietyAreaLabel,
+  matchesOperationsPeriod,
+  matchesSocietyAndArea,
+} from './operationsExportUtils';
 
 interface NotificationsSectionProps {
   notifications: PlatformNotification[];
@@ -30,6 +35,7 @@ export const NotificationsSection: React.FC<NotificationsSectionProps> = ({
   societies,
   onRefresh,
 }) => {
+  const todayIso = new Date().toISOString().slice(0, 10);
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
   const [targetAudience, setTargetAudience] = useState<PlatformNotification['targetAudience']>('ALL_SOCIETIES');
@@ -37,6 +43,59 @@ export const NotificationsSection: React.FC<NotificationsSectionProps> = ({
   const [priority, setPriority] = useState<'NORMAL' | 'HIGH' | 'EMERGENCY'>('NORMAL');
   const [loading, setLoading] = useState(false);
   const [sentNotice, setSentNotice] = useState<string | null>(null);
+
+  // Operations Period, Society & Area Filters for Broadcast History & PDF Export
+  const [searchTerm, setSearchTerm] = useState('');
+  const [periodMode, setPeriodMode] = useState<OperationsPeriodMode>('ALL');
+  const [dayValue, setDayValue] = useState<string>(todayIso);
+  const [monthValue, setMonthValue] = useState<string>(todayIso.slice(0, 7));
+  const [yearValue, setYearValue] = useState<string>(todayIso.slice(0, 4));
+  const [societyFilter, setSocietyFilter] = useState<string>('ALL');
+  const [areaFilter, setAreaFilter] = useState<string>('ALL');
+
+  const filteredNotifications = useMemo(() => {
+    return notifications.filter((n) => {
+      const q = searchTerm.trim().toLowerCase();
+      const matchSearch =
+        !q ||
+        n.title.toLowerCase().includes(q) ||
+        n.message.toLowerCase().includes(q) ||
+        n.targetAudience.toLowerCase().includes(q) ||
+        (n.selectedSocietyName && n.selectedSocietyName.toLowerCase().includes(q));
+
+      const matchPeriod = matchesOperationsPeriod(
+        n.sentAt,
+        periodMode,
+        dayValue,
+        monthValue,
+        yearValue
+      );
+
+      // Platform-wide broadcasts apply to all societies unless filtered to a specific society/area
+      const matchScope =
+        societyFilter === 'ALL' && areaFilter === 'ALL'
+          ? true
+          : matchesSocietyAndArea({
+              societies,
+              societyId: n.selectedSocietyId,
+              societyName: n.selectedSocietyName,
+              societyFilter,
+              areaFilter,
+            });
+
+      return matchSearch && matchPeriod && matchScope;
+    });
+  }, [
+    notifications,
+    societies,
+    searchTerm,
+    periodMode,
+    dayValue,
+    monthValue,
+    yearValue,
+    societyFilter,
+    areaFilter,
+  ]);
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,6 +125,65 @@ export const NotificationsSection: React.FC<NotificationsSectionProps> = ({
     }
   };
 
+  const handleResetFilters = () => {
+    setPeriodMode('ALL');
+    setDayValue(todayIso);
+    setMonthValue(todayIso.slice(0, 7));
+    setYearValue(todayIso.slice(0, 4));
+    setSocietyFilter('ALL');
+    setAreaFilter('ALL');
+    setSearchTerm('');
+  };
+
+  const handleExportPdf = () => {
+    const columns = [
+      'Title',
+      'Audience',
+      'Society',
+      'Area',
+      'Priority',
+      'Status',
+      'Recipients',
+      'Sent By',
+      'Date & Time',
+      'Message',
+    ];
+    const rows = filteredNotifications.map((n) => ({
+      Title: n.title,
+      Audience: n.targetAudience,
+      Society: n.selectedSocietyName || 'All Societies',
+      Area: n.selectedSocietyId || n.selectedSocietyName
+        ? getSocietyAreaLabel(societies, n.selectedSocietyId, n.selectedSocietyName)
+        : 'All Areas',
+      Priority: n.priority || 'NORMAL',
+      Status: n.deliveryStatus,
+      Recipients: n.recipientCount,
+      'Sent By': n.sentBy,
+      'Date & Time': new Date(n.sentAt).toLocaleString(),
+      Message: n.message,
+    }));
+
+    const { slug } = buildPeriodLabel(periodMode, dayValue, monthValue, yearValue);
+    exportOperationsPdf({
+      title: 'Announcements & Broadcast Log',
+      subtitle: 'Platform-wide Advisories, Alerts & Emergency Broadcast History',
+      filename: `happiiz_announcements_${slug}`,
+      columns,
+      rows,
+      filterSummary: buildFilterSummaryText({
+        societies,
+        societyFilter,
+        areaFilter,
+        mode: periodMode,
+        dayValue,
+        monthValue,
+        yearValue,
+        searchTerm,
+        recordCount: rows.length,
+      }),
+    });
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -74,6 +192,27 @@ export const NotificationsSection: React.FC<NotificationsSectionProps> = ({
           Send verified administrative alerts, maintenance advisories, and emergency sirens to societies
         </p>
       </div>
+
+      {/* Period, Society-wise & Area-wise Filter + PDF Export Toolbar */}
+      <OperationsExportToolbar
+        societies={societies}
+        periodMode={periodMode}
+        onPeriodModeChange={setPeriodMode}
+        dayValue={dayValue}
+        onDayValueChange={setDayValue}
+        monthValue={monthValue}
+        onMonthValueChange={setMonthValue}
+        yearValue={yearValue}
+        onYearValueChange={setYearValue}
+        societyFilter={societyFilter}
+        onSocietyFilterChange={setSocietyFilter}
+        areaFilter={areaFilter}
+        onAreaFilterChange={setAreaFilter}
+        matchedCount={filteredNotifications.length}
+        onExportPdf={handleExportPdf}
+        pdfButtonLabel="Download Announcements PDF"
+        onResetFilters={handleResetFilters}
+      />
 
       {sentNotice && (
         <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-800 flex items-center gap-2 animate-fade-in">
@@ -179,41 +318,61 @@ export const NotificationsSection: React.FC<NotificationsSectionProps> = ({
 
         {/* Broadcast History */}
         <div className="lg:col-span-2 p-5 rounded-2xl bg-[#FFFFFF] border border-[#E6F1F5] shadow-xs space-y-4">
-          <div className="flex items-center justify-between pb-2 border-b border-[#E6F1F5]">
-            <h3 className="text-sm font-extrabold text-[#111111]">Broadcast History</h3>
-            <span className="text-xs font-mono text-[#A9B0B8]">{notifications.length} dispatches</span>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-[#E6F1F5]">
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-extrabold text-[#111111]">Broadcast History</h3>
+              <span className="text-xs font-mono text-[#A9B0B8]">
+                ({filteredNotifications.length} dispatches)
+              </span>
+            </div>
+            <div className="relative w-full sm:w-64">
+              <Search className="w-3.5 h-3.5 text-[#A9B0B8] absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search title, message, society..."
+                className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-[#E6F1F5] bg-[#F1F9FC]/60 text-xs text-[#111111] focus:outline-none focus:border-[#673AB7]"
+              />
+            </div>
           </div>
 
           <div className="space-y-3">
-            {notifications.map((n) => (
-              <div
-                key={n.id}
-                className="p-4 rounded-xl bg-[#F1F9FC]/60 border border-[#E6F1F5] space-y-2"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <h4 className="font-extrabold text-sm text-[#111111]">{n.title}</h4>
-                    <div className="text-[11px] text-[#A9B0B8] flex items-center gap-2 mt-0.5">
-                      <span>Target: {n.targetAudience}</span>
-                      {n.selectedSocietyName && <span>• {n.selectedSocietyName}</span>}
-                    </div>
-                  </div>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700">
-                    {n.deliveryStatus}
-                  </span>
-                </div>
-
-                <p className="text-xs text-[#111111] leading-relaxed">{n.message}</p>
-
-                <div className="pt-2 border-t border-[#E6F1F5] flex items-center justify-between text-[10px] text-[#A9B0B8]">
-                  <span>Sent by: {n.sentBy}</span>
-                  <span className="font-mono">
-                    {new Date(n.sentAt).toLocaleDateString()} at{' '}
-                    {new Date(n.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                </div>
+            {filteredNotifications.length === 0 ? (
+              <div className="py-10 text-center text-xs text-[#64748B]">
+                No announcements match your selected period, society, or area filters.
               </div>
-            ))}
+            ) : (
+              filteredNotifications.map((n) => (
+                <div
+                  key={n.id}
+                  className="p-4 rounded-xl bg-[#F1F9FC]/60 border border-[#E6F1F5] space-y-2"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <h4 className="font-extrabold text-sm text-[#111111]">{n.title}</h4>
+                      <div className="text-[11px] text-[#A9B0B8] flex items-center gap-2 mt-0.5">
+                        <span>Target: {n.targetAudience}</span>
+                        {n.selectedSocietyName && <span>• {n.selectedSocietyName}</span>}
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700">
+                      {n.deliveryStatus}
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-[#111111] leading-relaxed">{n.message}</p>
+
+                  <div className="pt-2 border-t border-[#E6F1F5] flex items-center justify-between text-[10px] text-[#A9B0B8]">
+                    <span>Sent by: {n.sentBy}</span>
+                    <span className="font-mono">
+                      {new Date(n.sentAt).toLocaleDateString()} at{' '}
+                      {new Date(n.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>

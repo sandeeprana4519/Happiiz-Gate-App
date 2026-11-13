@@ -38,7 +38,9 @@ export type EcosystemEventType =
   | 'MARKETPLACE_BOOKING_ACCEPTED'
   | 'MARKETPLACE_BOOKING_STARTED'
   | 'MARKETPLACE_BOOKING_COMPLETED'
-  | 'PARTNER_RATES_UPDATED';
+  | 'PARTNER_RATES_UPDATED'
+  | 'ROLE_PERMISSIONS_UPDATED'
+  | 'SETTINGS_UPDATED';
 
 export interface EcosystemSyncEvent<T = any> {
   id: string;

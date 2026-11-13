@@ -69,6 +69,8 @@ export interface SocietyHouseholdMember {
   phone?: string;
   age?: number;
   isEmergencyContact?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface SocietyVehicle {
@@ -81,19 +83,29 @@ export interface SocietyVehicle {
   plateNumber: string; // e.g. "KA-05-MN-4421"
   parkingSlot: string;
   rfidTagId?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface SocietyDomesticHelper {
   id: string;
+  helperId?: string;
   societyId: string;
+  societyName?: string;
+  buildingName?: string;
   flatNumber: string;
   name: string;
-  role: 'Maid' | 'Cook' | 'Driver' | 'Nanny' | 'Elderly Care';
+  role: 'Maid' | 'Cook' | 'Driver' | 'Nanny' | 'Elderly Care' | 'Cleaner' | 'Gardener' | 'Staff';
   phone: string;
   passCode: string;
+  gatePassNumber?: string;
+  qrToken?: string;
+  validUntil?: string;
   workingHours: string;
   policeVerificationVerified: boolean;
   status: 'ACTIVE' | 'REVOKED';
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface SocietyGate {
@@ -245,16 +257,34 @@ export interface SocietyCommunityPost {
   status: 'APPROVED' | 'REPORTED' | 'HIDDEN';
 }
 
+export type SocietyStaffRoleLabel =
+  | 'Society Admin'
+  | 'Society Manager'
+  | 'Accountant'
+  | 'Security Supervisor'
+  | 'Maintenance Staff'
+  | 'HelpDesk Executive'
+  | 'Facility Coordinator'
+  | 'Society Staff';
+
 export interface SocietyStaffMember {
   id: string;
+  uid?: string;
   societyId: string;
+  societyName?: string;
+  societyCode?: string;
   fullName: string;
   phone: string;
   email?: string;
-  role: 'Society Admin' | 'Society Manager' | 'Accountant' | 'Security Supervisor' | 'Maintenance Staff';
+  password?: string;
+  role: SocietyStaffRoleLabel;
   assignedArea?: string;
+  permissions?: string[];
+  isOwner?: boolean;
   status: 'ACTIVE' | 'INACTIVE';
   joinedAt: string;
+  updatedAt?: string;
+  lastLoginAt?: string;
 }
 
 export interface SocietyDetailedSettings {
@@ -358,7 +388,11 @@ export interface SocietyAuditLogEntry {
     | 'AMENITY_BOOKING_APPROVED'
     | 'SERVICE_PARTNER_APPROVED'
     | 'SERVICE_PARTNER_SUSPENDED'
-    | 'SETTINGS_UPDATED';
+    | 'SETTINGS_UPDATED'
+    | 'STAFF_CREATED'
+    | 'STAFF_UPDATED'
+    | 'STAFF_STATUS_CHANGED'
+    | 'STAFF_DELETED';
   targetRecordId?: string;
   targetDescription: string;
   timestamp: string;

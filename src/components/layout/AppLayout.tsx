@@ -13,10 +13,26 @@ import { PWAInstallPrompt } from './PWAInstallPrompt';
 export const AppLayout: React.FC = () => {
   const location = useLocation();
 
-  // Dedicated portal dashboards (Super Admin, Society Admin, Resident, Guard, Service Partner)
+  // Dedicated portal dashboards (Super Admin, Society/Company Admin, Resident, Guard, Service Partner)
   // manage their own dedicated navigation, headers, sidebars, and full-screen layouts.
   // They should never render the public website marketing Header and Footer.
-  const isDedicatedPortalScreen = location.pathname.startsWith('/dashboard');
+  const searchParams = new URLSearchParams(location.search);
+  const roleParam = searchParams.get('role');
+  const isAdminLoginRoute =
+    location.pathname === '/login' &&
+    (roleParam === 'SUPER_ADMIN' ||
+      roleParam === 'PLATFORM_STAFF' ||
+      roleParam === 'SOCIETY_ADMIN' ||
+      roleParam === 'SOCIETY_STAFF' ||
+      roleParam === 'COMPANY_ADMIN');
+
+  const isDedicatedPortalScreen =
+    location.pathname.startsWith('/dashboard') ||
+    location.pathname.startsWith('/admin') ||
+    location.pathname.startsWith('/staff') ||
+    location.pathname.startsWith('/society') ||
+    location.pathname.startsWith('/company') ||
+    isAdminLoginRoute;
 
   if (isDedicatedPortalScreen) {
     return (

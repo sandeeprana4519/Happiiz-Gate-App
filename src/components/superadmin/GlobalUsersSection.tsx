@@ -1,54 +1,102 @@
-import React, { useState } from 'react';
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React, { useMemo, useState } from 'react';
 import { GlobalUserRecord } from '../../types/admin';
+import { Society } from '../../types/society';
 import {
-  Users,
   Search,
-  Shield,
-  Filter,
   KeyRound,
-  ShieldAlert,
   CheckCircle2,
-  Lock,
-  Mail,
-  Phone,
-  Building2,
-  Calendar,
 } from 'lucide-react';
 import {
   updateGlobalUserStatus,
   triggerPasswordReset,
 } from '../../services/firebase/superadmin.service';
+import { OperationsExportToolbar } from './OperationsExportToolbar';
+import {
+  OperationsPeriodMode,
+  buildFilterSummaryText,
+  buildPeriodLabel,
+  exportOperationsExcel,
+  exportOperationsPdf,
+  getSocietyAreaLabel,
+  matchesOperationsPeriod,
+  matchesSocietyAndArea,
+} from './operationsExportUtils';
 
 interface GlobalUsersSectionProps {
   users: GlobalUserRecord[];
+  societies?: Society[];
   onRefresh: () => void;
 }
 
 export const GlobalUsersSection: React.FC<GlobalUsersSectionProps> = ({
   users,
+  societies = [],
   onRefresh,
 }) => {
+  const todayIso = new Date().toISOString().slice(0, 10);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('ALL');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Operations Period, Society-wise & Area-wise Filters
+  const [periodMode, setPeriodMode] = useState<OperationsPeriodMode>('ALL');
+  const [dayValue, setDayValue] = useState<string>(todayIso);
+  const [monthValue, setMonthValue] = useState<string>(todayIso.slice(0, 7));
+  const [yearValue, setYearValue] = useState<string>(todayIso.slice(0, 4));
+  const [societyFilter, setSocietyFilter] = useState<string>('ALL');
+  const [areaFilter, setAreaFilter] = useState<string>('ALL');
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  const filtered = users.filter((u) => {
-    const matchSearch =
-      !searchTerm ||
-      u.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.phoneNumber.includes(searchTerm) ||
-      (u.email && u.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (u.societyName && u.societyName.toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchRole = roleFilter === 'ALL' || u.role === roleFilter;
-    const matchStatus = statusFilter === 'ALL' || u.status === statusFilter;
-    return matchSearch && matchRole && matchStatus;
-  });
+  const filtered = useMemo(() => {
+    return users.filter((u) => {
+      const matchSearch =
+        !searchTerm ||
+        u.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        u.phoneNumber.includes(searchTerm) ||
+        (u.email && u.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (u.societyName && u.societyName.toLowerCase().includes(searchTerm.toLowerCase()));
+      const matchRole = roleFilter === 'ALL' || u.role === roleFilter;
+      const matchStatus = statusFilter === 'ALL' || u.status === statusFilter;
+      const matchPeriod = matchesOperationsPeriod(
+        u.registeredAt,
+        periodMode,
+        dayValue,
+        monthValue,
+        yearValue
+      );
+      const matchScope = matchesSocietyAndArea({
+        societies,
+        societyId: u.societyId,
+        societyName: u.societyName,
+        societyFilter,
+        areaFilter,
+      });
+
+      return matchSearch && matchRole && matchStatus && matchPeriod && matchScope;
+    });
+  }, [
+    users,
+    societies,
+    searchTerm,
+    roleFilter,
+    statusFilter,
+    periodMode,
+    dayValue,
+    monthValue,
+    yearValue,
+    societyFilter,
+    areaFilter,
+  ]);
 
   const handleToggleStatus = async (user: GlobalUserRecord) => {
     const nextStatus = user.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE';
@@ -64,6 +112,74 @@ export const GlobalUsersSection: React.FC<GlobalUsersSectionProps> = ({
     }
     await triggerPasswordReset(user.email);
     showToast(`Password reset link dispatched securely to ${user.email}`);
+  };
+
+  const handleResetFilters = () => {
+    setPeriodMode('ALL');
+    setDayValue(todayIso);
+    setMonthValue(todayIso.slice(0, 7));
+    setYearValue(todayIso.slice(0, 4));
+    setSocietyFilter('ALL');
+    setAreaFilter('ALL');
+    setSearchTerm('');
+    setRoleFilter('ALL');
+    setStatusFilter('ALL');
+  };
+
+  const buildExportRows = () => {
+    const columns = [
+      'Full Name',
+      'Phone',
+      'Email',
+      'Role',
+      'Assigned Society',
+      'Area',
+      'Registered Date',
+      'Status',
+    ];
+    const rows = filtered.map((u) => ({
+      'Full Name': u.fullName,
+      Phone: u.phoneNumber,
+      Email: u.email || '-',
+      Role: u.role.replace('_', ' '),
+      'Assigned Society': u.societyName || 'Global Platform Root',
+      Area:
+        u.societyId || u.societyName
+          ? getSocietyAreaLabel(societies, u.societyId, u.societyName)
+          : 'Platform Root',
+      'Registered Date': new Date(u.registeredAt).toLocaleDateString(),
+      Status: u.status,
+    }));
+    return { columns, rows };
+  };
+
+  const handleExportPdf = () => {
+    const { columns, rows } = buildExportRows();
+    const { slug } = buildPeriodLabel(periodMode, dayValue, monthValue, yearValue);
+    exportOperationsPdf({
+      title: 'Global Users Security Directory',
+      subtitle: 'Centralized Registry Across Tenant Societies, Guards, Partners & Staff',
+      filename: `happiiz_global_users_${slug}`,
+      columns,
+      rows,
+      filterSummary: buildFilterSummaryText({
+        societies,
+        societyFilter,
+        areaFilter,
+        mode: periodMode,
+        dayValue,
+        monthValue,
+        yearValue,
+        searchTerm,
+        recordCount: rows.length,
+      }),
+    });
+  };
+
+  const handleExportExcel = () => {
+    const { columns, rows } = buildExportRows();
+    const { slug } = buildPeriodLabel(periodMode, dayValue, monthValue, yearValue);
+    exportOperationsExcel(`happiiz_global_users_${slug}`, columns, rows);
   };
 
   return (
@@ -90,6 +206,30 @@ export const GlobalUsersSection: React.FC<GlobalUsersSectionProps> = ({
           <span>Total Platform Directory: {users.length} Users</span>
         </div>
       </div>
+
+      {/* Period, Society-wise & Area-wise Filter + PDF & Excel Export Toolbar */}
+      <OperationsExportToolbar
+        societies={societies}
+        periodMode={periodMode}
+        onPeriodModeChange={setPeriodMode}
+        dayValue={dayValue}
+        onDayValueChange={setDayValue}
+        monthValue={monthValue}
+        onMonthValueChange={setMonthValue}
+        yearValue={yearValue}
+        onYearValueChange={setYearValue}
+        societyFilter={societyFilter}
+        onSocietyFilterChange={setSocietyFilter}
+        areaFilter={areaFilter}
+        onAreaFilterChange={setAreaFilter}
+        matchedCount={filtered.length}
+        onExportPdf={handleExportPdf}
+        onExportExcel={handleExportExcel}
+        showExcelExport={true}
+        pdfButtonLabel="Download Users PDF"
+        excelButtonLabel="Download Excel Sheet"
+        onResetFilters={handleResetFilters}
+      />
 
       {/* Filter and Search Bar */}
       <div className="p-3.5 bg-white rounded-2xl border border-[#E6F1F5] shadow-xs flex flex-col md:flex-row gap-3 items-center justify-between">

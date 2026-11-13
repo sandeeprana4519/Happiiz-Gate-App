@@ -52,7 +52,7 @@ export const SocietyReportsView: React.FC<ReportsViewProps> = ({
     { id: 'HELPDESK_REPORT', name: '6. HelpDesk Tickets & Resolution Times', count: data.complaints.length, desc: 'Open, in progress, resolved maintenance tickets' },
     { id: 'GUARD_ATTENDANCE', name: '7. Security Guard Duty & Gate Coverage', count: data.guards.length, desc: 'Guard shift logs, assigned gates, attendance audit' },
     { id: 'AMENITY_UTILIZATION', name: '8. Amenity Bookings & Club Utilization', count: data.amenities.length, desc: 'Clubhouse, tennis courts, swimming pool reservation metrics' },
-    { id: 'VEHICLE_DIRECTORY', name: '9. Registered Vehicles & Parking Slots', count: 12, desc: '4-wheelers, 2-wheelers, EVs, parking numbers, RFID' },
+    { id: 'VEHICLE_DIRECTORY', name: '9. Registered Vehicles & Parking Slots', count: 12, desc: '4-wheelers, 2-wheelers, EVs, parking numbers' },
     { id: 'DOMESTIC_STAFF', name: '10. Domestic Helpers & GatePass Audit', count: 8, desc: 'Active maids, cooks, drivers, gate pass codes' },
     { id: 'EMERGENCY_LOG', name: '11. Emergency SOS Panic Button Incidents', count: 2, desc: 'Historical fire, lift entrapment, medical alerts' },
     { id: 'AUDIT_TRAIL', name: '12. System Audit Trail & Activity Log', count: auditLogs.length, desc: 'Immutable log of administrative approvals, overrides, and security events' }

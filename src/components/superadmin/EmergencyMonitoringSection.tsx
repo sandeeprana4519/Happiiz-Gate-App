@@ -1,36 +1,79 @@
-import React, { useState } from 'react';
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React, { useMemo, useState } from 'react';
 import { GlobalEmergencyIncident } from '../../types/admin';
+import { Society } from '../../types/society';
 import {
-  AlertOctagon,
   Flame,
-  HeartPulse,
-  Building,
   CheckCircle2,
-  Phone,
-  Clock,
-  ShieldCheck,
   Volume2,
   VolumeX,
   AlertTriangle,
 } from 'lucide-react';
 import { resolveGlobalEmergency } from '../../services/firebase/superadmin.service';
+import { OperationsExportToolbar } from './OperationsExportToolbar';
+import {
+  OperationsPeriodMode,
+  buildFilterSummaryText,
+  buildPeriodLabel,
+  exportOperationsPdf,
+  getSocietyAreaLabel,
+  matchesOperationsPeriod,
+  matchesSocietyAndArea,
+} from './operationsExportUtils';
 
 interface EmergencyMonitoringSectionProps {
   incidents: GlobalEmergencyIncident[];
+  societies?: Society[];
   onRefresh: () => void;
 }
 
 export const EmergencyMonitoringSection: React.FC<EmergencyMonitoringSectionProps> = ({
   incidents,
+  societies = [],
   onRefresh,
 }) => {
+  const todayIso = new Date().toISOString().slice(0, 10);
   const [sirenEnabled, setSirenEnabled] = useState(false);
   const [selectedIncident, setSelectedIncident] = useState<GlobalEmergencyIncident | null>(null);
   const [resolutionNotes, setResolutionNotes] = useState('');
   const [resolving, setResolving] = useState(false);
 
-  const activeIncidents = incidents.filter((i) => i.status === 'ACTIVE' || i.status === 'ESCALATED');
-  const resolvedIncidents = incidents.filter((i) => i.status === 'RESOLVED');
+  // Operations Period, Society & Area Filters
+  const [periodMode, setPeriodMode] = useState<OperationsPeriodMode>('ALL');
+  const [dayValue, setDayValue] = useState<string>(todayIso);
+  const [monthValue, setMonthValue] = useState<string>(todayIso.slice(0, 7));
+  const [yearValue, setYearValue] = useState<string>(todayIso.slice(0, 4));
+  const [societyFilter, setSocietyFilter] = useState<string>('ALL');
+  const [areaFilter, setAreaFilter] = useState<string>('ALL');
+
+  const filteredIncidents = useMemo(() => {
+    return incidents.filter((inc) => {
+      const matchPeriod = matchesOperationsPeriod(
+        inc.alertTime,
+        periodMode,
+        dayValue,
+        monthValue,
+        yearValue
+      );
+      const matchScope = matchesSocietyAndArea({
+        societies,
+        societyId: inc.societyId,
+        societyName: inc.societyName,
+        societyFilter,
+        areaFilter,
+      });
+      return matchPeriod && matchScope;
+    });
+  }, [incidents, societies, periodMode, dayValue, monthValue, yearValue, societyFilter, areaFilter]);
+
+  const activeIncidents = filteredIncidents.filter(
+    (i) => i.status === 'ACTIVE' || i.status === 'ESCALATED'
+  );
+  const resolvedIncidents = filteredIncidents.filter((i) => i.status === 'RESOLVED');
 
   const handleResolve = async () => {
     if (!selectedIncident || !resolutionNotes.trim()) return;
@@ -45,6 +88,61 @@ export const EmergencyMonitoringSection: React.FC<EmergencyMonitoringSectionProp
     } finally {
       setResolving(false);
     }
+  };
+
+  const handleResetFilters = () => {
+    setPeriodMode('ALL');
+    setDayValue(todayIso);
+    setMonthValue(todayIso.slice(0, 7));
+    setYearValue(todayIso.slice(0, 4));
+    setSocietyFilter('ALL');
+    setAreaFilter('ALL');
+  };
+
+  const handleExportPdf = () => {
+    const columns = [
+      'Alert Type',
+      'Society',
+      'Area',
+      'Location',
+      'Reported By',
+      'Phone',
+      'Alert Time',
+      'Status',
+      'Resolved By',
+      'Notes',
+    ];
+    const rows = filteredIncidents.map((inc) => ({
+      'Alert Type': inc.alertType,
+      Society: inc.societyName,
+      Area: getSocietyAreaLabel(societies, inc.societyId, inc.societyName),
+      Location: `${inc.buildingName} • ${inc.flatNumber}`,
+      'Reported By': inc.reportedByName,
+      Phone: inc.reportedByPhone,
+      'Alert Time': new Date(inc.alertTime).toLocaleString(),
+      Status: inc.status,
+      'Resolved By': inc.resolvedBy || 'Pending / Guard',
+      Notes: inc.escalationNotes || 'Premises secured.',
+    }));
+
+    const { slug } = buildPeriodLabel(periodMode, dayValue, monthValue, yearValue);
+    exportOperationsPdf({
+      title: 'Emergency Monitoring Report',
+      subtitle: 'Global SOS & Panic Escalation Incident Log',
+      filename: `happiiz_emergency_monitoring_${slug}`,
+      columns,
+      rows,
+      filterSummary: buildFilterSummaryText({
+        societies,
+        societyFilter,
+        areaFilter,
+        mode: periodMode,
+        dayValue,
+        monthValue,
+        yearValue,
+        recordCount: rows.length,
+      }),
+    });
   };
 
   return (
@@ -76,6 +174,27 @@ export const EmergencyMonitoringSection: React.FC<EmergencyMonitoringSectionProp
         </div>
       </div>
 
+      {/* Period, Society-wise & Area-wise Filter + PDF Export Toolbar */}
+      <OperationsExportToolbar
+        societies={societies}
+        periodMode={periodMode}
+        onPeriodModeChange={setPeriodMode}
+        dayValue={dayValue}
+        onDayValueChange={setDayValue}
+        monthValue={monthValue}
+        onMonthValueChange={setMonthValue}
+        yearValue={yearValue}
+        onYearValueChange={setYearValue}
+        societyFilter={societyFilter}
+        onSocietyFilterChange={setSocietyFilter}
+        areaFilter={areaFilter}
+        onAreaFilterChange={setAreaFilter}
+        matchedCount={filteredIncidents.length}
+        onExportPdf={handleExportPdf}
+        pdfButtonLabel="Download Emergency PDF"
+        onResetFilters={handleResetFilters}
+      />
+
       {/* Primary Responder Notice Banner */}
       <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 flex items-start gap-3 text-xs text-amber-900">
         <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
@@ -101,7 +220,7 @@ export const EmergencyMonitoringSection: React.FC<EmergencyMonitoringSectionProp
         {activeIncidents.length === 0 ? (
           <div className="bg-emerald-50/70 border border-emerald-200 rounded-2xl p-6 text-center text-emerald-800 text-xs font-semibold">
             <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
-            All premises and societies secure. Zero active SOS panic alerts across the platform.
+            All premises and societies secure. Zero active SOS panic alerts matching the selected filters.
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -176,28 +295,36 @@ export const EmergencyMonitoringSection: React.FC<EmergencyMonitoringSectionProp
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#E6F1F5]">
-                {resolvedIncidents.map((inc) => (
-                  <tr key={inc.id} className="hover:bg-purple-50/20">
-                    <td className="py-3 px-4 font-bold text-gray-900">
-                      <span className="px-2 py-0.5 rounded bg-gray-100 border border-gray-200">
-                        {inc.alertType}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="font-semibold text-gray-800">{inc.societyName}</div>
-                      <div className="text-[11px] text-gray-400">{inc.buildingName} • {inc.flatNumber}</div>
-                    </td>
-                    <td className="py-3 px-4 text-gray-500 font-mono text-[11px]">
-                      {new Date(inc.alertTime).toLocaleString()}
-                    </td>
-                    <td className="py-3 px-4 font-semibold text-gray-700">
-                      {inc.resolvedBy || 'Chief Guard'}
-                    </td>
-                    <td className="py-3 px-4 text-gray-600 max-w-sm truncate" title={inc.escalationNotes}>
-                      {inc.escalationNotes || 'Premises secured.'}
+                {resolvedIncidents.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-8 text-center text-gray-400">
+                      No resolved emergency incidents match the selected filters.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  resolvedIncidents.map((inc) => (
+                    <tr key={inc.id} className="hover:bg-purple-50/20">
+                      <td className="py-3 px-4 font-bold text-gray-900">
+                        <span className="px-2 py-0.5 rounded bg-gray-100 border border-gray-200">
+                          {inc.alertType}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="font-semibold text-gray-800">{inc.societyName}</div>
+                        <div className="text-[11px] text-gray-400">{inc.buildingName} • {inc.flatNumber}</div>
+                      </td>
+                      <td className="py-3 px-4 text-gray-500 font-mono text-[11px]">
+                        {new Date(inc.alertTime).toLocaleString()}
+                      </td>
+                      <td className="py-3 px-4 font-semibold text-gray-700">
+                        {inc.resolvedBy || 'Chief Guard'}
+                      </td>
+                      <td className="py-3 px-4 text-gray-600 max-w-sm truncate" title={inc.escalationNotes}>
+                        {inc.escalationNotes || 'Premises secured.'}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

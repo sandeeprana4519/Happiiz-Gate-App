@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   SubscriptionPlan,
   SocietySubscription,
@@ -35,11 +35,15 @@ import {
   Filter,
 } from 'lucide-react';
 
+export type SubscriptionSubTab = 'ASSIGNED' | 'PLANS' | 'ASSIGN';
+
 interface SubscriptionsSectionProps {
   plans: SubscriptionPlan[];
   societySubscriptions: SocietySubscription[];
   societies: Society[];
   onRefresh: () => Promise<void>;
+  initialSubTab?: SubscriptionSubTab;
+  onSubTabChange?: (subTab: SubscriptionSubTab) => void;
 }
 
 export const SubscriptionsSection: React.FC<SubscriptionsSectionProps> = ({
@@ -47,9 +51,20 @@ export const SubscriptionsSection: React.FC<SubscriptionsSectionProps> = ({
   societySubscriptions,
   societies,
   onRefresh,
+  initialSubTab = 'ASSIGNED',
+  onSubTabChange,
 }) => {
   // Navigation tabs for the 3 distinct color-coded sections
-  const [activeSubTab, setActiveSubTab] = useState<'ASSIGNED' | 'PLANS' | 'ASSIGN'>('ASSIGNED');
+  const [activeSubTab, setActiveSubTab] = useState<SubscriptionSubTab>(initialSubTab);
+
+  useEffect(() => {
+    setActiveSubTab(initialSubTab);
+  }, [initialSubTab]);
+
+  const switchSubTab = (tab: SubscriptionSubTab) => {
+    setActiveSubTab(tab);
+    onSubTabChange?.(tab);
+  };
 
   // Search & Filter state for Active Subscriptions
   const [searchTerm, setSearchTerm] = useState('');
@@ -257,7 +272,7 @@ export const SubscriptionsSection: React.FC<SubscriptionsSectionProps> = ({
     try {
       await assignSubscriptionToSociety(socId, pId, assignDurationMonths);
       await onRefresh();
-      setActiveSubTab('ASSIGNED');
+      switchSubTab('ASSIGNED');
     } catch (err) {
       console.error(err);
     } finally {
@@ -285,63 +300,143 @@ export const SubscriptionsSection: React.FC<SubscriptionsSectionProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Top Header & Section Switcher */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      {/* Top Header & Clean 3-Card Section Switcher */}
+      <div className="space-y-4">
         <div>
-          <h2 className="text-xl font-bold text-[#111111] tracking-tight">
+          <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">
             Subscription & Licensing Management
           </h2>
-          <p className="text-xs text-[#A9B0B8] font-medium">
+          <p className="text-xs text-slate-500 font-medium mt-0.5">
             Configure multi-tenant licensing packages, tenant renewals, and gate security quotas
           </p>
         </div>
 
-        {/* 3 Distinct Navigation Modules */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* 1. Active Society Subscriptions - Emerald/Green Reassuring Accent */}
+        {/* 3 Clean, Well-Spaced Navigation Modules */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* 1. Active Subscriptions */}
           <button
             type="button"
-            onClick={() => setActiveSubTab('ASSIGNED')}
-            className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+            onClick={() => switchSubTab('ASSIGNED')}
+            className={`flex items-center gap-3 p-3.5 rounded-2xl text-left transition-all cursor-pointer border ${
               activeSubTab === 'ASSIGNED'
-                ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
-                : 'bg-white hover:bg-emerald-50 text-emerald-800 border-emerald-200'
+                ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white border-emerald-600 shadow-md shadow-emerald-950/15'
+                : 'bg-white hover:bg-emerald-50/70 text-slate-900 border-slate-200/80 hover:border-emerald-300 shadow-xs'
             }`}
           >
-            <ShieldCheck className="w-4 h-4" />
-            <span>Active Subscriptions ({societySubscriptions.length})</span>
+            <div
+              className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                activeSubTab === 'ASSIGNED'
+                  ? 'bg-white/20 text-white'
+                  : 'bg-emerald-50 text-emerald-600'
+              }`}
+            >
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-extrabold truncate">Active Subscriptions</span>
+                <span
+                  className={`px-2 py-0.5 rounded-md text-[11px] font-extrabold tabular-nums shrink-0 ${
+                    activeSubTab === 'ASSIGNED'
+                      ? 'bg-white/20 text-white'
+                      : 'bg-emerald-100 text-emerald-800'
+                  }`}
+                >
+                  {societySubscriptions.length}
+                </span>
+              </div>
+              <p
+                className={`text-[11px] truncate mt-0.5 ${
+                  activeSubTab === 'ASSIGNED' ? 'text-emerald-50' : 'text-slate-500'
+                }`}
+              >
+                Active tenant licenses & validity
+              </p>
+            </div>
           </button>
 
-          {/* 2. Subscription Tiers / Plans - Indigo/Violet Modern Primary Accent */}
+          {/* 2. Subscription Tiers */}
           <button
             type="button"
-            onClick={() => setActiveSubTab('PLANS')}
-            className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+            onClick={() => switchSubTab('PLANS')}
+            className={`flex items-center gap-3 p-3.5 rounded-2xl text-left transition-all cursor-pointer border ${
               activeSubTab === 'PLANS'
-                ? 'bg-[#673AB7] text-white border-[#673AB7] shadow-sm'
-                : 'bg-white hover:bg-purple-50 text-[#673AB7] border-purple-200'
+                ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white border-indigo-600 shadow-md shadow-indigo-950/15'
+                : 'bg-white hover:bg-indigo-50/70 text-slate-900 border-slate-200/80 hover:border-indigo-300 shadow-xs'
             }`}
           >
-            <Layers className="w-4 h-4" />
-            <span>Subscription Tiers ({plans.length})</span>
+            <div
+              className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                activeSubTab === 'PLANS'
+                  ? 'bg-white/20 text-white'
+                  : 'bg-indigo-50 text-indigo-600'
+              }`}
+            >
+              <Layers className="w-5 h-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-extrabold truncate">Subscription Tiers</span>
+                <span
+                  className={`px-2 py-0.5 rounded-md text-[11px] font-extrabold tabular-nums shrink-0 ${
+                    activeSubTab === 'PLANS'
+                      ? 'bg-white/20 text-white'
+                      : 'bg-indigo-100 text-indigo-800'
+                  }`}
+                >
+                  {plans.length}
+                </span>
+              </div>
+              <p
+                className={`text-[11px] truncate mt-0.5 ${
+                  activeSubTab === 'PLANS' ? 'text-indigo-50' : 'text-slate-500'
+                }`}
+              >
+                Packages, trial days & quotas
+              </p>
+            </div>
           </button>
 
-          {/* 3. Assign / Upgrade Plan - Action-Oriented Blue Accent */}
+          {/* 3. Assign / Upgrade Plan */}
           <button
             type="button"
             onClick={() => {
               if (societies.length > 0 && !assignSocietyId) setAssignSocietyId(societies[0].id);
               if (plans.length > 0 && !assignPlanId) setAssignPlanId(plans[0].id);
-              setActiveSubTab('ASSIGN');
+              switchSubTab('ASSIGN');
             }}
-            className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+            className={`flex items-center gap-3 p-3.5 rounded-2xl text-left transition-all cursor-pointer border ${
               activeSubTab === 'ASSIGN'
-                ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                : 'bg-white hover:bg-blue-50 text-blue-700 border-blue-200'
+                ? 'bg-gradient-to-r from-blue-600 to-sky-600 text-white border-blue-600 shadow-md shadow-blue-950/15'
+                : 'bg-white hover:bg-sky-50/70 text-slate-900 border-slate-200/80 hover:border-blue-300 shadow-xs'
             }`}
           >
-            <CreditCard className="w-4 h-4" />
-            <span>Assign / Upgrade Plan</span>
+            <div
+              className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                activeSubTab === 'ASSIGN'
+                  ? 'bg-white/20 text-white'
+                  : 'bg-sky-50 text-blue-600'
+              }`}
+            >
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-extrabold truncate">Assign / Upgrade Plan</span>
+                <ArrowRight
+                  className={`w-4 h-4 shrink-0 ${
+                    activeSubTab === 'ASSIGN' ? 'text-white' : 'text-blue-500'
+                  }`}
+                />
+              </div>
+              <p
+                className={`text-[11px] truncate mt-0.5 ${
+                  activeSubTab === 'ASSIGN' ? 'text-sky-50' : 'text-slate-500'
+                }`}
+              >
+                Provision or renew society license
+              </p>
+            </div>
           </button>
         </div>
       </div>
@@ -509,7 +604,7 @@ export const SubscriptionsSection: React.FC<SubscriptionsSectionProps> = ({
                             onClick={() => {
                               setAssignSocietyId(sub.societyId);
                               setAssignPlanId(sub.planId);
-                              setActiveSubTab('ASSIGN');
+                              switchSubTab('ASSIGN');
                             }}
                             className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-emerald-200 bg-white hover:bg-emerald-50 text-emerald-800 text-xs font-bold transition cursor-pointer shadow-2xs"
                           >
@@ -652,7 +747,7 @@ export const SubscriptionsSection: React.FC<SubscriptionsSectionProps> = ({
                     onClick={() => {
                       setAssignPlanId(plan.id);
                       if (societies.length > 0 && !assignSocietyId) setAssignSocietyId(societies[0].id);
-                      setActiveSubTab('ASSIGN');
+                      switchSubTab('ASSIGN');
                     }}
                     className="p-1.5 rounded-xl bg-[#673AB7] hover:bg-[#5E35B1] text-white transition cursor-pointer shadow-2xs"
                     title="Assign This Plan to a Society"
@@ -799,7 +894,7 @@ export const SubscriptionsSection: React.FC<SubscriptionsSectionProps> = ({
               <div className="flex items-center justify-end gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={() => setActiveSubTab('ASSIGNED')}
+                  onClick={() => switchSubTab('ASSIGNED')}
                   className="px-4 py-2 rounded-xl border border-gray-300 text-xs font-bold text-gray-700 hover:bg-gray-50 cursor-pointer"
                 >
                   Cancel

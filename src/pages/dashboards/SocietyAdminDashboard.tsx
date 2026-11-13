@@ -305,12 +305,55 @@ export const SocietyAdminDashboard: React.FC = () => {
   };
 
   const handleToggleHelperStatus = async (id: string, currentStatus: 'ACTIVE' | 'REVOKED') => {
-    await societyAdminService.toggleHelperStatus(id, currentStatus);
+    await societyAdminService.toggleHelperStatus(id, currentStatus, currentSocietyId);
+    await loadSocietyData();
+  };
+
+  const handleAddHelper = async (helperData: any) => {
+    await societyAdminService.createDomesticHelper(currentSocietyId, {
+      ...helperData,
+      societyName: helperData.societyName || society.societyName || society.name,
+    });
+    await loadSocietyData();
+  };
+
+  const handleUpdateHelper = async (id: string, updates: Partial<SocietyDomesticHelper>) => {
+    await societyAdminService.updateDomesticHelper(currentSocietyId, id, updates);
+    await loadSocietyData();
+  };
+
+  const handleDeleteHelper = async (id: string) => {
+    await societyAdminService.deleteDomesticHelper(currentSocietyId, id);
     await loadSocietyData();
   };
 
   const handleAddVehicle = async (v: any) => {
     await societyAdminService.createVehicle(currentSocietyId, v);
+    await loadSocietyData();
+  };
+
+  const handleUpdateVehicle = async (id: string, updates: Partial<SocietyVehicle>) => {
+    await societyAdminService.updateVehicle(currentSocietyId, id, updates);
+    await loadSocietyData();
+  };
+
+  const handleDeleteVehicle = async (id: string) => {
+    await societyAdminService.deleteVehicle(currentSocietyId, id);
+    await loadSocietyData();
+  };
+
+  const handleAddHouseholdMember = async (member: any) => {
+    await societyAdminService.createHouseholdMember(currentSocietyId, member);
+    await loadSocietyData();
+  };
+
+  const handleUpdateHouseholdMember = async (id: string, updates: Partial<SocietyHouseholdMember>) => {
+    await societyAdminService.updateHouseholdMember(currentSocietyId, id, updates);
+    await loadSocietyData();
+  };
+
+  const handleDeleteHouseholdMember = async (id: string) => {
+    await societyAdminService.deleteHouseholdMember(currentSocietyId, id);
     await loadSocietyData();
   };
 
@@ -425,12 +468,34 @@ export const SocietyAdminDashboard: React.FC = () => {
   };
 
   const handleAddStaff = async (s: any) => {
-    await societyAdminService.createStaff(s);
+    const created = await societyAdminService.createStaff(
+      {
+        ...s,
+        societyName: s.societyName || society.societyName || society.name,
+        societyCode: s.societyCode || society.societyCode,
+      },
+      currentSocietyId
+    );
+    await loadSocietyData();
+    return created;
+  };
+
+  const handleUpdateStaff = async (id: string, updates: Partial<SocietyStaffMember>) => {
+    await societyAdminService.updateStaff(currentSocietyId, id, {
+      ...updates,
+      societyName: updates.societyName || society.societyName || society.name,
+      societyCode: updates.societyCode || society.societyCode,
+    });
     await loadSocietyData();
   };
 
   const handleToggleStaffStatus = async (id: string, currentStatus: 'ACTIVE' | 'INACTIVE') => {
-    await societyAdminService.toggleStaffStatus(id, currentStatus);
+    await societyAdminService.toggleStaffStatus(id, currentStatus, currentSocietyId);
+    await loadSocietyData();
+  };
+
+  const handleDeleteStaff = async (id: string) => {
+    await societyAdminService.deleteStaff(currentSocietyId, id);
     await loadSocietyData();
   };
 
@@ -453,10 +518,10 @@ export const SocietyAdminDashboard: React.FC = () => {
 
   if (loading || !analytics || !settings) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#FFFFFF]">
+      <div className="min-h-screen flex items-center justify-center bg-[#F4F8F7]">
         <div className="flex flex-col items-center gap-3">
-          <Loader2 className="w-8 h-8 text-[#673AB7] animate-spin" />
-          <p className="text-sm font-semibold text-gray-600">Loading Society Command Center...</p>
+          <Loader2 className="w-8 h-8 text-teal-600 animate-spin" />
+          <p className="text-sm font-semibold text-slate-700">Loading Society Command Center...</p>
         </div>
       </div>
     );
@@ -466,7 +531,7 @@ export const SocietyAdminDashboard: React.FC = () => {
   const openComplaintsCount = complaints.filter(c => c.status === 'OPEN').length;
 
   return (
-    <div className="flex min-h-screen bg-[#FFFFFF] text-gray-900 font-sans antialiased">
+    <div className="flex min-h-screen bg-[#F4F8F7] text-slate-900 font-sans antialiased">
       {/* Responsive Left Navigation Sidebar */}
       <SocietyAdminSidebar
         currentTab={activeTab}
@@ -578,11 +643,20 @@ export const SocietyAdminDashboard: React.FC = () => {
           {activeTab === 'household' && (
             <SocietyHouseholdView
               society={society}
+              flats={flats}
               household={household}
               vehicles={vehicles}
               helpers={helpers}
               onToggleHelperStatus={handleToggleHelperStatus}
+              onAddHelper={handleAddHelper}
+              onUpdateHelper={handleUpdateHelper}
+              onDeleteHelper={handleDeleteHelper}
               onAddVehicle={handleAddVehicle}
+              onUpdateVehicle={handleUpdateVehicle}
+              onDeleteVehicle={handleDeleteVehicle}
+              onAddHouseholdMember={handleAddHouseholdMember}
+              onUpdateHouseholdMember={handleUpdateHouseholdMember}
+              onDeleteHouseholdMember={handleDeleteHouseholdMember}
             />
           )}
 
@@ -704,7 +778,9 @@ export const SocietyAdminDashboard: React.FC = () => {
               society={society}
               staff={staff}
               onAddStaff={handleAddStaff}
+              onUpdateStaff={handleUpdateStaff}
               onToggleStaffStatus={handleToggleStaffStatus}
+              onDeleteStaff={handleDeleteStaff}
             />
           )}
 
