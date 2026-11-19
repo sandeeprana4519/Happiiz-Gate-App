@@ -1,0 +1,6 @@
+{
+  "name": "Happiiz Gate App",
+  "description": "Mobile-first Society Management, Security, Visitor Management and Facility Management Progressive Web Application.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

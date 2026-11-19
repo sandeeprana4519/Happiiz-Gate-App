@@ -1,0 +1,197 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Authenticated user identity, primary role, status, and optional society or platform assignment.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "fullName": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "username": { "type": "string" },
+        "loginId": { "type": "string" },
+        "phoneNumber": { "type": "string" },
+        "primaryRole": {
+          "type": "string",
+          "enum": [
+            "SUPER_ADMIN",
+            "PLATFORM_STAFF",
+            "PLATFORM_ADMIN_STAFF",
+            "DIGITAL_SUPPORTER",
+            "SOCIETY_ADMIN",
+            "SECURITY_STAFF",
+            "SOCIETY_STAFF",
+            "SECURITY_GUARD",
+            "GATE_GUARD",
+            "RESIDENT",
+            "SERVICE_PARTNER"
+          ]
+        },
+        "accountStatus": {
+          "type": "string",
+          "enum": ["PENDING", "ACTIVE", "REJECTED", "SUSPENDED", "INACTIVE"]
+        },
+        "societyId": { "type": "string" },
+        "assignedSocieties": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "fullName", "primaryRole", "accountStatus"]
+    },
+    "Society": {
+      "title": "Residential Society / Gated Community",
+      "description": "Multi-tenant tenant boundary containing towers, flats, members, gates, vehicles, and financial invoices.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "societyName": { "type": "string" },
+        "societyCode": { "type": "string" },
+        "city": { "type": "string" },
+        "state": { "type": "string" },
+        "status": {
+          "type": "string",
+          "enum": ["ACTIVE", "PENDING_VERIFICATION", "SUSPENDED", "INACTIVE", "REJECTED"]
+        },
+        "subscriptionPlan": { "type": "string" },
+        "totalTowers": { "type": "number" },
+        "totalFlats": { "type": "number" },
+        "totalGates": { "type": "number" }
+      },
+      "required": ["id", "societyName", "societyCode", "status"]
+    },
+    "SocietyMember": {
+      "title": "Society Membership",
+      "description": "Society-scoped role membership tying a user UID to a society with explicit status and flat/gate assignment.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "societyId": { "type": "string" },
+        "role": { "type": "string" },
+        "membershipStatus": { "type": "string", "enum": ["PENDING", "ACTIVE", "REJECTED", "SUSPENDED"] },
+        "flatNumber": { "type": "string" },
+        "assignedGate": { "type": "string" }
+      },
+      "required": ["uid", "societyId", "role", "membershipStatus"]
+    },
+    "GatePass": {
+      "title": "Visitor Gate Pass",
+      "description": "Digital visitor or delivery pass verified at society checkpoints.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "societyId": { "type": "string" },
+        "visitorName": { "type": "string" },
+        "visitorType": { "type": "string" },
+        "flatNumber": { "type": "string" },
+        "passcode": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["societyId", "visitorName", "flatNumber", "status"]
+    },
+    "Vehicle": {
+      "title": "Registered Vehicle",
+      "description": "Society-scoped vehicle record linked to a flat and ANPR whitelist/blacklist status.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "societyId": { "type": "string" },
+        "registrationNumber": { "type": "string" },
+        "normalizedRegistrationNumber": { "type": "string" },
+        "ownerUserId": { "type": "string" },
+        "status": { "type": "string", "enum": ["ACTIVE", "PENDING", "BLOCKED", "EXPIRED"] }
+      },
+      "required": ["societyId", "registrationNumber", "normalizedRegistrationNumber", "status"]
+    },
+    "AnprScan": {
+      "title": "ANPR Scan Event",
+      "description": "Plate recognition capture and verification outcome recorded at a society gate.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "societyId": { "type": "string" },
+        "gateId": { "type": "string" },
+        "normalizedPlate": { "type": "string" },
+        "confidence": { "type": "number" },
+        "outcome": { "type": "string" },
+        "scannedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["societyId", "normalizedPlate", "outcome", "scannedAt"]
+    },
+    "SupportTicket": {
+      "title": "Support & Escalation Ticket",
+      "description": "Platform or society support ticket handled by Digital Supporters, Platform Staff, and Super Admin.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "ticketNumber": { "type": "string" },
+        "submittedByUid": { "type": "string" },
+        "societyId": { "type": "string" },
+        "priority": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"] },
+        "status": { "type": "string", "enum": ["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"] }
+      },
+      "required": ["id", "ticketNumber", "submittedByUid", "status"]
+    },
+    "ServicePartner": {
+      "title": "Service Partner Profile",
+      "description": "Verified contractor or agency profile with KYC state and offered home services.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "businessName": { "type": "string" },
+        "verificationStatus": { "type": "string", "enum": ["PENDING", "ACTIVE", "REJECTED", "SUSPENDED"] }
+      },
+      "required": ["uid", "businessName", "verificationStatus"]
+    },
+    "AuditLog": {
+      "title": "Immutable Compliance Audit Log",
+      "description": "Append-only security and governance event ledger.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "actorUid": { "type": "string" },
+        "action": { "type": "string" },
+        "targetRecordType": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "actorUid", "action", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Authenticated user profiles isolated per UID."
+    },
+    "/societies/{societyId}": {
+      "schema": { "$ref": "#/entities/Society" },
+      "description": "Tenant society root documents."
+    },
+    "/societies/{societyId}/members/{memberId}": {
+      "schema": { "$ref": "#/entities/SocietyMember" },
+      "description": "Tenant membership and RBAC assignments."
+    },
+    "/societies/{societyId}/vehicles/{vehicleId}": {
+      "schema": { "$ref": "#/entities/Vehicle" },
+      "description": "Society vehicle whitelist and parking directory."
+    },
+    "/societies/{societyId}/anprScans/{scanId}": {
+      "schema": { "$ref": "#/entities/AnprScan" },
+      "description": "Gate ANPR recognition history per society."
+    },
+    "/gate_passes/{passId}": {
+      "schema": { "$ref": "#/entities/GatePass" },
+      "description": "Active and historical visitor passes."
+    },
+    "/servicePartners/{partnerId}": {
+      "schema": { "$ref": "#/entities/ServicePartner" },
+      "description": "Service Partner agency KYC and catalog."
+    },
+    "/supportTickets/{ticketId}": {
+      "schema": { "$ref": "#/entities/SupportTicket" },
+      "description": "Digital Supporter & platform helpdesk tickets."
+    },
+    "/auditLogs/{logId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "Immutable platform security and operational audit trail."
+    }
+  }
+}

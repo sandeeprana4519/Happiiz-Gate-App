@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Offline — Happiiz Supporter App</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #1E1B4B;
+      color: #F8FAFC;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+      text-align: center;
+    }
+    .card {
+      background: rgba(30, 58, 138, 0.85);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      border-radius: 24px;
+      padding: 2rem 1.5rem;
+      max-width: 400px;
+      width: 100%;
+    }
+    h1 { font-size: 1.35rem; margin-bottom: 0.75rem; }
+    p { font-size: 0.9rem; color: #BAE6FD; line-height: 1.5; margin-bottom: 1.5rem; }
+    button {
+      width: 100%;
+      padding: 0.875rem 1rem;
+      border-radius: 12px;
+      border: none;
+      background: #22D3EE;
+      color: #082F49;
+      font-weight: 700;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Happiiz Supporter Offline</h1>
+    <p>Network connectivity is temporarily offline. Reconnect to sync assigned support tickets and send live responses to societies.</p>
+    <button onclick="window.location.reload()">Retry Connection</button>
+  </div>
+</body>
+</html>

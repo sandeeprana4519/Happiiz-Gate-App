@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Offline — Happiiz Guard App</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #022C22;
+      color: #F8FAFC;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+      text-align: center;
+    }
+    .card {
+      background: rgba(6, 78, 59, 0.85);
+      border: 1px solid rgba(52, 211, 153, 0.35);
+      border-radius: 24px;
+      padding: 2rem 1.5rem;
+      max-width: 400px;
+      width: 100%;
+    }
+    h1 { font-size: 1.35rem; margin-bottom: 0.75rem; }
+    p { font-size: 0.9rem; color: #A7F3D0; line-height: 1.5; margin-bottom: 1.5rem; }
+    button {
+      width: 100%;
+      padding: 0.875rem 1rem;
+      border-radius: 12px;
+      border: none;
+      background: #10B981;
+      color: #022C22;
+      font-weight: 700;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Happiiz Guard Offline</h1>
+    <p>Gate terminal connectivity is temporarily unavailable. Reconnect to mobile data or society Wi-Fi to resume live visitor check-ins and ANPR plate scanning.</p>
+    <button onclick="window.location.reload()">Retry Gate Connection</button>
+  </div>
+</body>
+</html>

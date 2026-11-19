@@ -1,0 +1,94 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  --bg-main: #F8FAFC;
+  --text-primary: #0F172A;
+}
+
+@layer base {
+  *, *::before, *::after {
+    box-sizing: border-box;
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
+  }
+
+  *::-webkit-scrollbar {
+    display: none !important;
+    width: 0px !important;
+    height: 0px !important;
+  }
+
+  html {
+    max-width: 100%;
+    overflow-x: hidden;
+    -webkit-text-size-adjust: 100%;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background-color: var(--bg-main);
+    color: var(--text-primary);
+    min-height: 100vh;
+    max-width: 100%;
+    overflow-x: hidden;
+    -webkit-tap-highlight-color: transparent;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* Safe Area Utilities for Mobile Notches & Gesture Bars */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 16px);
+}
+
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 16px);
+}
+
+.min-h-screen-safe {
+  min-height: calc(100vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+}
+
+/* Reference UI Cards & Containers */
+.card-light-blue {
+  background-color: #F1F9FC;
+  border: 1px solid #E6F1F5;
+  border-radius: 1.25rem;
+}
+
+.card-light-blue-secondary {
+  background-color: #F5FAFC;
+  border: 1px solid #E6F1F5;
+  border-radius: 1.25rem;
+}
+
+.btn-purple-primary {
+  background-color: #673AB7;
+  color: #FFFFFF;
+  transition: all 0.15s ease-in-out;
+}
+.btn-purple-primary:hover {
+  background-color: #512DA8;
+}
+
+/* Hide scrollbar for clean horizontal swipe containers */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Subtle, soft touch feedback */
+.active-press:active {
+  transform: scale(0.96);
+  transition: transform 0.1s ease;
+}

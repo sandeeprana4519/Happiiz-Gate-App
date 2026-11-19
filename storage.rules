@@ -1,0 +1,101 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isSuperAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.role == 'SUPER_ADMIN' ||
+        (firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)) &&
+         firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.primaryRole == 'SUPER_ADMIN')
+      );
+    }
+
+    function isActiveSocietyMember(societyId) {
+      return isAuthenticated() && (
+        isSuperAdmin() ||
+        (
+          firestore.exists(/databases/(default)/documents/societies/$(societyId)/members/$(request.auth.uid)) &&
+          firestore.get(/databases/(default)/documents/societies/$(societyId)/members/$(request.auth.uid)).data.membershipStatus == 'ACTIVE'
+        )
+      );
+    }
+
+    function isSocietyAdminOrSecurity(societyId) {
+      return isAuthenticated() && (
+        isSuperAdmin() ||
+        (
+          firestore.exists(/databases/(default)/documents/societies/$(societyId)/members/$(request.auth.uid)) &&
+          firestore.get(/databases/(default)/documents/societies/$(societyId)/members/$(request.auth.uid)).data.membershipStatus == 'ACTIVE' &&
+          firestore.get(/databases/(default)/documents/societies/$(societyId)/members/$(request.auth.uid)).data.role in ['SOCIETY_ADMIN', 'SECURITY_STAFF', 'SECURITY_GUARD', 'GATE_GUARD']
+        )
+      );
+    }
+
+    function isImage() {
+      return request.resource != null && request.resource.contentType.matches('image/.*');
+    }
+
+    function isDocumentMime() {
+      return request.resource != null && (
+        request.resource.contentType.matches('image/.*') ||
+        request.resource.contentType == 'application/pdf'
+      );
+    }
+
+    function isUnder5MB() {
+      return request.resource != null && request.resource.size < 5 * 1024 * 1024;
+    }
+
+    function isUnder10MB() {
+      return request.resource != null && request.resource.size < 10 * 1024 * 1024;
+    }
+
+    // 1. User Profile Avatars
+    match /avatars/{userId}/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId) && isImage() && isUnder5MB();
+    }
+
+    // 2. Onboarding & KYC Verification Documents
+    match /documents/{societyId}/{userId}/{fileName} {
+      allow read: if isOwner(userId) || isSocietyAdminOrSecurity(societyId);
+      allow write: if isOwner(userId) && isDocumentMime() && isUnder5MB();
+    }
+
+    // 3. Society Scoped Visitor Photos & Category Documents (notices, kyc, bills)
+    match /societies/{societyId}/visitors/{fileName} {
+      allow read: if isActiveSocietyMember(societyId);
+      allow write: if isSocietyAdminOrSecurity(societyId) && isImage() && isUnder5MB();
+    }
+
+    match /societies/{societyId}/{category}/{fileName} {
+      allow read: if isActiveSocietyMember(societyId) && category in ['notices', 'kyc', 'bills'];
+      allow write: if isActiveSocietyMember(societyId) && category in ['notices', 'kyc', 'bills'] && isDocumentMime() && isUnder10MB();
+    }
+
+    // 4. Legacy Visitor Photos Path
+    match /visitors/{societyId}/{fileName} {
+      allow read: if isActiveSocietyMember(societyId);
+      allow write: if isSocietyAdminOrSecurity(societyId) && isImage() && isUnder5MB();
+    }
+
+    // 5. Private AI ANPR Vehicle & Plate Captures (Society-Isolated, Image-Only, <= 5MB)
+    match /anpr/{societyId}/{allPaths=**} {
+      allow read: if isSocietyAdminOrSecurity(societyId);
+      allow write: if isSocietyAdminOrSecurity(societyId) && isImage() && isUnder5MB();
+    }
+
+    // Default explicit deny
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

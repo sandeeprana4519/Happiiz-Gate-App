@@ -1,0 +1,33 @@
+{
+  "id": "/guard/",
+  "name": "Happiiz Guard — Gate Sentinel",
+  "short_name": "Happiiz Guard",
+  "description": "Standalone Gate Guard Mobile App for visitor verification, AI ANPR scanning, daily help tracking & SOS.",
+  "start_url": "/guard/",
+  "scope": "/guard/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#064E3B",
+  "background_color": "#022C22",
+  "categories": ["security", "productivity"],
+  "icons": [
+    {
+      "src": "/guard/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/guard/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/guard/pwa-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

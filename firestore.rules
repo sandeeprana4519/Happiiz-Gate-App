@@ -1,0 +1,504 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =========================================================================
+    // HELPER FUNCTIONS (Multi-Tenant 7-Role Zero-Trust RBAC)
+    // =========================================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_-]+$');
+    }
+
+    function userDocExists() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAccountActive() {
+      return !userDocExists() || (
+        getUserData().accountStatus != 'SUSPENDED' &&
+        getUserData().accountStatus != 'REJECTED' &&
+        getUserData().accountStatus != 'INACTIVE'
+      );
+    }
+
+    function isSuperAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.role == 'SUPER_ADMIN' ||
+        (userDocExists() && (
+          getUserData().role == 'SUPER_ADMIN' ||
+          getUserData().primaryRole == 'SUPER_ADMIN' ||
+          getUserData().isSuperAdmin == true
+        ))
+      );
+    }
+
+    function isPlatformStaff() {
+      return isAuthenticated() && isAccountActive() && userDocExists() && (
+        getUserData().primaryRole == 'PLATFORM_STAFF' ||
+        getUserData().primaryRole == 'PLATFORM_ADMIN_STAFF' ||
+        getUserData().role == 'PLATFORM_STAFF' ||
+        getUserData().role == 'PLATFORM_ADMIN_STAFF'
+      );
+    }
+
+    function isDigitalSupporter() {
+      return isAuthenticated() && isAccountActive() && userDocExists() && (
+        getUserData().primaryRole == 'DIGITAL_SUPPORTER' ||
+        getUserData().role == 'DIGITAL_SUPPORTER'
+      );
+    }
+
+    function memberExists(societyId) {
+      return exists(/databases/$(database)/documents/societies/$(societyId)/members/$(request.auth.uid));
+    }
+
+    function getMemberDoc(societyId) {
+      return get(/databases/$(database)/documents/societies/$(societyId)/members/$(request.auth.uid)).data;
+    }
+
+    function hasActiveMembership(societyId) {
+      return isAuthenticated() && isAccountActive() && (
+        isSuperAdmin() ||
+        (memberExists(societyId) && getMemberDoc(societyId).membershipStatus == 'ACTIVE')
+      );
+    }
+
+    function isSocietyAdmin(societyId) {
+      return isAuthenticated() && isAccountActive() && (
+        isSuperAdmin() ||
+        (
+          memberExists(societyId) &&
+          getMemberDoc(societyId).role == 'SOCIETY_ADMIN' &&
+          getMemberDoc(societyId).membershipStatus == 'ACTIVE'
+        )
+      );
+    }
+
+    function isSecurityStaff(societyId) {
+      return isAuthenticated() && isAccountActive() && (
+        isSocietyAdmin(societyId) ||
+        (
+          memberExists(societyId) &&
+          getMemberDoc(societyId).role == 'SECURITY_STAFF' &&
+          getMemberDoc(societyId).membershipStatus == 'ACTIVE'
+        )
+      );
+    }
+
+    function isSocietyStaff(societyId) {
+      return isAuthenticated() && isAccountActive() && (
+        isSocietyAdmin(societyId) ||
+        (
+          memberExists(societyId) &&
+          getMemberDoc(societyId).role == 'SOCIETY_STAFF' &&
+          getMemberDoc(societyId).membershipStatus == 'ACTIVE'
+        )
+      );
+    }
+
+    function isSecurityGuard(societyId) {
+      return isAuthenticated() && isAccountActive() && (
+        isSecurityStaff(societyId) ||
+        (
+          memberExists(societyId) &&
+          (getMemberDoc(societyId).role == 'SECURITY_GUARD' || getMemberDoc(societyId).role == 'GATE_GUARD') &&
+          getMemberDoc(societyId).membershipStatus == 'ACTIVE'
+        )
+      );
+    }
+
+    function isResident(societyId) {
+      return isAuthenticated() && isAccountActive() && (
+        isSocietyAdmin(societyId) ||
+        (
+          memberExists(societyId) &&
+          getMemberDoc(societyId).role == 'RESIDENT' &&
+          getMemberDoc(societyId).membershipStatus == 'ACTIVE'
+        )
+      );
+    }
+
+    function unchangedUserPrivilegeFields() {
+      return (!('role' in request.resource.data) || request.resource.data.role == resource.data.role) &&
+        (!('primaryRole' in request.resource.data) || request.resource.data.primaryRole == resource.data.primaryRole) &&
+        (!('isSuperAdmin' in request.resource.data) || request.resource.data.isSuperAdmin == resource.data.isSuperAdmin) &&
+        (!('accountStatus' in request.resource.data) || request.resource.data.accountStatus == resource.data.accountStatus);
+    }
+
+    // =========================================================================
+    // USER PROFILES (Strict PII Isolation — No Blanket Authenticated Reads)
+    // =========================================================================
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isSuperAdmin() || isPlatformStaff();
+      allow list: if isSuperAdmin() || isPlatformStaff();
+
+      allow create: if isOwner(userId) && isValidId(userId) &&
+        (!('role' in request.resource.data) || (
+          request.resource.data.role != 'SUPER_ADMIN' &&
+          request.resource.data.role != 'PLATFORM_STAFF' &&
+          request.resource.data.role != 'PLATFORM_ADMIN_STAFF'
+        )) &&
+        (!('primaryRole' in request.resource.data) || (
+          request.resource.data.primaryRole != 'SUPER_ADMIN' &&
+          request.resource.data.primaryRole != 'PLATFORM_STAFF' &&
+          request.resource.data.primaryRole != 'PLATFORM_ADMIN_STAFF'
+        )) &&
+        (!('isSuperAdmin' in request.resource.data) || request.resource.data.isSuperAdmin == false);
+
+      allow update: if isSuperAdmin() || (
+        isOwner(userId) && unchangedUserPrivilegeFields()
+      );
+      allow delete: if isSuperAdmin();
+    }
+
+    // =========================================================================
+    // SOCIETIES & MULTI-TENANT SUBCOLLECTIONS
+    // =========================================================================
+    match /societies/{societyId} {
+      allow read: if isAuthenticated() && (
+        hasActiveMembership(societyId) ||
+        isSuperAdmin() ||
+        isPlatformStaff() ||
+        isDigitalSupporter() ||
+        resource.data.status == 'ACTIVE'
+      );
+      allow create, delete: if isSuperAdmin();
+      allow update: if isSuperAdmin() || isSocietyAdmin(societyId);
+
+      // Memberships Subcollection
+      match /members/{memberId} {
+        allow get: if isOwner(memberId) || isSocietyAdmin(societyId) || isSecurityStaff(societyId) || isSuperAdmin();
+        allow list: if isSocietyAdmin(societyId) || isSecurityStaff(societyId) || isSuperAdmin();
+
+        allow create: if isAuthenticated() && isValidId(memberId) && (
+          (isOwner(memberId) && request.resource.data.membershipStatus == 'PENDING' && request.resource.data.societyId == societyId) ||
+          isSocietyAdmin(societyId) ||
+          isSuperAdmin()
+        );
+        allow update, delete: if isSocietyAdmin(societyId) || isSuperAdmin();
+      }
+
+      // Physical Buildings & Flats
+      match /buildings/{buildingId} {
+        allow read: if hasActiveMembership(societyId) || isDigitalSupporter();
+        allow write: if isSocietyAdmin(societyId);
+      }
+
+      match /flats/{flatId} {
+        allow read: if hasActiveMembership(societyId) || isDigitalSupporter();
+        allow write: if isSocietyAdmin(societyId);
+      }
+
+      // Security Gates & Checkpoints
+      match /gates/{gateId} {
+        allow read: if hasActiveMembership(societyId);
+        allow write: if isSocietyAdmin(societyId) || isSecurityStaff(societyId);
+      }
+
+      // Notices
+      match /notices/{noticeId} {
+        allow read: if hasActiveMembership(societyId);
+        allow write: if isSocietyAdmin(societyId) || isSocietyStaff(societyId);
+      }
+
+      // Complaints & HelpDesk
+      match /complaints/{complaintId} {
+        allow read: if hasActiveMembership(societyId) || isDigitalSupporter();
+        allow create: if hasActiveMembership(societyId) && request.resource.data.residentId == request.auth.uid;
+        allow update: if isSocietyAdmin(societyId) || isSocietyStaff(societyId) || isDigitalSupporter() ||
+          (hasActiveMembership(societyId) && resource.data.residentId == request.auth.uid);
+        allow delete: if isSocietyAdmin(societyId);
+      }
+
+      // Maintenance Invoices
+      match /invoices/{invoiceId} {
+        allow read: if isSocietyAdmin(societyId) || isSocietyStaff(societyId) ||
+          (hasActiveMembership(societyId) && resource.data.residentId == request.auth.uid);
+        allow write: if isSocietyAdmin(societyId) || isSocietyStaff(societyId);
+      }
+
+      // Amenities & Reservations
+      match /amenities/{amenityId} {
+        allow read: if hasActiveMembership(societyId);
+        allow write: if isSocietyAdmin(societyId);
+      }
+
+      match /bookings/{bookingId} {
+        allow read: if hasActiveMembership(societyId);
+        allow create: if hasActiveMembership(societyId) && request.resource.data.residentId == request.auth.uid;
+        allow update, delete: if isSocietyAdmin(societyId) ||
+          (hasActiveMembership(societyId) && resource.data.residentId == request.auth.uid);
+      }
+
+      // Emergency SOS Alerts
+      match /emergencyAlerts/{alertId} {
+        allow read: if hasActiveMembership(societyId) || isDigitalSupporter();
+        allow create: if hasActiveMembership(societyId);
+        allow update: if isSocietyAdmin(societyId) || isSecurityStaff(societyId) || isSecurityGuard(societyId);
+        allow delete: if isSocietyAdmin(societyId);
+      }
+
+      // Household & Domestic Helpers
+      match /household/{householdId} {
+        allow read: if isSocietyAdmin(societyId) || isSecurityGuard(societyId) ||
+          (hasActiveMembership(societyId) && resource.data.residentId == request.auth.uid);
+        allow create: if isSocietyAdmin(societyId) ||
+          (hasActiveMembership(societyId) && request.resource.data.residentId == request.auth.uid);
+        allow update, delete: if isSocietyAdmin(societyId) ||
+          (hasActiveMembership(societyId) && resource.data.residentId == request.auth.uid);
+      }
+
+      match /helpers/{helperId} {
+        allow read: if hasActiveMembership(societyId);
+        allow write: if isSocietyAdmin(societyId) || isSecurityStaff(societyId);
+      }
+
+      // Vehicles Registry (Unified Society-Isolated)
+      match /vehicles/{vehicleId} {
+        allow read: if hasActiveMembership(societyId);
+        allow create: if (
+          isSocietyAdmin(societyId) ||
+          isSecurityStaff(societyId) ||
+          (
+            isResident(societyId) &&
+            request.resource.data.societyId == societyId &&
+            (request.resource.data.ownerUserId == request.auth.uid || request.resource.data.residentId == request.auth.uid)
+          )
+        );
+        allow update: if (
+          isSocietyAdmin(societyId) ||
+          isSecurityStaff(societyId) ||
+          (
+            isSecurityGuard(societyId) &&
+            request.resource.data.societyId == resource.data.societyId &&
+            request.resource.data.ownerUserId == resource.data.ownerUserId &&
+            request.resource.data.normalizedRegistrationNumber == resource.data.normalizedRegistrationNumber
+          ) ||
+          (
+            isResident(societyId) &&
+            (resource.data.ownerUserId == request.auth.uid || resource.data.residentId == request.auth.uid) &&
+            request.resource.data.ownerUserId == resource.data.ownerUserId &&
+            request.resource.data.societyId == resource.data.societyId
+          )
+        );
+        allow delete: if isSocietyAdmin(societyId) || isSecurityStaff(societyId) || (
+          isResident(societyId) &&
+          (resource.data.ownerUserId == request.auth.uid || resource.data.residentId == request.auth.uid)
+        );
+      }
+
+      // Vehicle Movement History (Append-Only & Strictly Immutable)
+      match /vehicleMovements/{movementId} {
+        allow read: if isSocietyAdmin(societyId) || isSecurityStaff(societyId) || isSecurityGuard(societyId) ||
+          (hasActiveMembership(societyId) && resource.data.ownerUserId == request.auth.uid);
+        allow create: if (isSecurityGuard(societyId) || isSecurityStaff(societyId) || isSocietyAdmin(societyId)) &&
+          request.resource.data.societyId == societyId &&
+          (request.resource.data.direction == 'IN' || request.resource.data.direction == 'OUT');
+        allow update, delete: if false;
+      }
+
+      // AI ANPR Scan History Logs (Society Scoped)
+      match /anprScans/{scanId} {
+        allow read: if isSocietyAdmin(societyId) || isSecurityStaff(societyId) || isSecurityGuard(societyId);
+        allow create: if (isSecurityGuard(societyId) || isSecurityStaff(societyId) || isSocietyAdmin(societyId)) &&
+          request.resource.data.societyId == societyId;
+        allow update: if isSocietyAdmin(societyId) || isSecurityStaff(societyId) || (
+          isSecurityGuard(societyId) &&
+          request.resource.data.societyId == resource.data.societyId &&
+          request.resource.data.normalizedPlate == resource.data.normalizedPlate
+        );
+        allow delete: if isSocietyAdmin(societyId);
+      }
+
+      // Unknown Vehicles Logged at Gate
+      match /unknownVehicles/{entryId} {
+        allow read: if isSocietyAdmin(societyId) || isSecurityStaff(societyId) || isSecurityGuard(societyId);
+        allow create: if (isSecurityGuard(societyId) || isSecurityStaff(societyId) || isSocietyAdmin(societyId)) &&
+          request.resource.data.societyId == societyId;
+        allow update: if isSocietyAdmin(societyId) || isSecurityStaff(societyId) || isSecurityGuard(societyId);
+        allow delete: if isSocietyAdmin(societyId);
+      }
+
+      // Gate ANPR Camera Configurations & Retention/Barrier Settings
+      match /gateCameras/{cameraId} {
+        allow read: if isSocietyAdmin(societyId) || isSecurityStaff(societyId) || isSecurityGuard(societyId);
+        allow write: if isSocietyAdmin(societyId) || isSecurityStaff(societyId);
+      }
+
+      match /anprSettings/{settingId} {
+        allow read: if isSocietyAdmin(societyId) || isSecurityStaff(societyId) || isSecurityGuard(societyId);
+        allow write: if isSocietyAdmin(societyId);
+      }
+
+      // Society Staff & Guards Roster
+      match /staff/{staffId} {
+        allow read: if isSocietyAdmin(societyId) || isSecurityStaff(societyId);
+        allow write: if isSocietyAdmin(societyId);
+      }
+
+      // Society Settings
+      match /settings/{settingId} {
+        allow read: if hasActiveMembership(societyId);
+        allow write: if isSocietyAdmin(societyId);
+      }
+    }
+
+    // =========================================================================
+    // PLATFORM & CROSS-SOCIETY COLLECTIONS
+    // =========================================================================
+
+    // Access Requests
+    match /accessRequests/{requestId} {
+      allow read: if isAuthenticated() && (
+        resource.data.uid == request.auth.uid ||
+        resource.data.userId == request.auth.uid ||
+        isSocietyAdmin(resource.data.societyId) ||
+        isPlatformStaff() ||
+        isSuperAdmin()
+      );
+      allow create: if isAuthenticated() && isAccountActive() &&
+        (request.resource.data.uid == request.auth.uid || request.resource.data.userId == request.auth.uid) &&
+        request.resource.data.status == 'PENDING';
+      allow update: if isSocietyAdmin(resource.data.societyId) || isPlatformStaff() || isSuperAdmin();
+      allow delete: if isSuperAdmin();
+    }
+
+    // Service Partners (Owner / Staff / Active Marketplace Lookup Only)
+    match /servicePartners/{partnerId} {
+      allow read: if isOwner(partnerId) || isSuperAdmin() || isPlatformStaff() || isDigitalSupporter() ||
+        (isAuthenticated() && isAccountActive() && resource.data.verificationStatus == 'ACTIVE');
+      allow create: if isOwner(partnerId) && isValidId(partnerId) && request.resource.data.verificationStatus == 'PENDING';
+      allow update: if isSuperAdmin() || isPlatformStaff() ||
+        (isOwner(partnerId) && request.resource.data.verificationStatus == resource.data.verificationStatus);
+      allow delete: if isSuperAdmin();
+    }
+
+    // Service Bookings
+    match /service_bookings/{bookingId} {
+      allow read: if isAuthenticated() && isAccountActive() && (
+        resource.data.residentUid == request.auth.uid ||
+        resource.data.partnerId == request.auth.uid ||
+        isSocietyAdmin(resource.data.societyId) ||
+        isDigitalSupporter() ||
+        isSuperAdmin()
+      );
+      allow create: if isAuthenticated() && isAccountActive() &&
+        request.resource.data.residentUid == request.auth.uid &&
+        hasActiveMembership(request.resource.data.societyId);
+      allow update: if isAuthenticated() && isAccountActive() && (
+        resource.data.residentUid == request.auth.uid ||
+        resource.data.partnerId == request.auth.uid ||
+        isSocietyAdmin(resource.data.societyId) ||
+        isSuperAdmin()
+      );
+      allow delete: if isSuperAdmin();
+    }
+
+    // Gate Passes & Visitors
+    match /gate_passes/{passId} {
+      allow read: if hasActiveMembership(resource.data.societyId);
+      allow create: if hasActiveMembership(request.resource.data.societyId);
+      allow update: if isSecurityGuard(resource.data.societyId) ||
+        isSecurityStaff(resource.data.societyId) ||
+        isSocietyAdmin(resource.data.societyId) ||
+        (hasActiveMembership(resource.data.societyId) && resource.data.residentId == request.auth.uid);
+      allow delete: if isSocietyAdmin(resource.data.societyId);
+    }
+
+    // Security Emergency Alerts
+    match /security_alerts/{alertId} {
+      allow read: if hasActiveMembership(resource.data.societyId) || isDigitalSupporter();
+      allow create: if hasActiveMembership(request.resource.data.societyId);
+      allow update: if isSecurityGuard(resource.data.societyId) ||
+        isSecurityStaff(resource.data.societyId) ||
+        isSocietyAdmin(resource.data.societyId);
+      allow delete: if isSocietyAdmin(resource.data.societyId);
+    }
+
+    // Facility Bookings
+    match /facility_bookings/{bookingId} {
+      allow read: if hasActiveMembership(resource.data.societyId);
+      allow create: if hasActiveMembership(request.resource.data.societyId);
+      allow update, delete: if isSocietyAdmin(resource.data.societyId) ||
+        (hasActiveMembership(resource.data.societyId) && resource.data.userId == request.auth.uid);
+    }
+
+    // Subscription Plans
+    match /subscriptionPlans/{planId} {
+      allow read: if isAuthenticated() && isAccountActive();
+      allow create, update, delete: if isSuperAdmin();
+    }
+
+    // Society Subscriptions
+    match /subscriptions/{subscriptionId} {
+      allow read: if isSuperAdmin() || isPlatformStaff() || isSocietyAdmin(resource.data.societyId);
+      allow create, update, delete: if isSuperAdmin();
+    }
+
+    // Financial Transactions
+    match /transactions/{transactionId} {
+      allow read: if isSuperAdmin() || isPlatformStaff() ||
+        (resource.data.referenceId != null && isSocietyAdmin(resource.data.referenceId));
+      allow create, update, delete: if isSuperAdmin();
+    }
+
+    // Support Tickets (Digital Supporter, Platform Staff, Super Admin, Society Admin & Submitter)
+    match /supportTickets/{ticketId} {
+      allow read: if isAuthenticated() && isAccountActive() && (
+        isSuperAdmin() ||
+        isPlatformStaff() ||
+        isDigitalSupporter() ||
+        resource.data.submittedByUid == request.auth.uid ||
+        (resource.data.societyId != null && isSocietyAdmin(resource.data.societyId))
+      );
+      allow create: if isAuthenticated() && isAccountActive() &&
+        request.resource.data.submittedByUid == request.auth.uid;
+      allow update: if isAuthenticated() && isAccountActive() && (
+        isSuperAdmin() ||
+        isPlatformStaff() ||
+        isDigitalSupporter() ||
+        resource.data.submittedByUid == request.auth.uid
+      );
+      allow delete: if isSuperAdmin();
+    }
+
+    // Platform Notifications
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated() && isAccountActive();
+      allow create, update, delete: if isSuperAdmin() || isPlatformStaff();
+    }
+
+    // Administrative Audit Logs (Strict Append-Only & Immutable)
+    match /auditLogs/{logId} {
+      allow read: if isSuperAdmin() || isPlatformStaff();
+      allow create: if isAuthenticated() && isAccountActive() &&
+        request.resource.data.actorUid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // Platform Global Settings
+    match /platformSettings/{settingId} {
+      allow read: if isAuthenticated() && isAccountActive();
+      allow write: if isSuperAdmin();
+    }
+
+    // Catch-all explicit deny for unmapped paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
