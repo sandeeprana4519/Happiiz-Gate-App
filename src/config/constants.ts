@@ -10,6 +10,21 @@ export const APP_SHORT_NAME = 'Happiiz Gate';
 export const APP_TAGLINE = 'Next-Gen Society & Gate Security Management';
 export const APP_VERSION = '2.5.0-prod';
 
+const _env: Record<string, any> =
+  typeof import.meta !== 'undefined' && (import.meta as any).env
+    ? (import.meta as any).env
+    : typeof process !== 'undefined' && process.env
+    ? process.env
+    : {};
+
+/**
+ * Cryptographically verified Root Super Admin Firebase Auth UID (non-secret identifier).
+ * NEVER grants Super Admin by email alone — strictly bound to Firebase Auth UID.
+ */
+export const ROOT_SUPER_ADMIN_UID: string = String(
+  _env.VITE_ROOT_SUPER_ADMIN_UID || 'i2INKUJ27fZpwFKOBV5o7qOm4it2'
+).trim();
+
 export function normalizeUserRole(role?: string | null): UserRole {
   const upper = String(role || '').trim().toUpperCase().replace(/[\s-]+/g, '_');
   if (!upper) return 'RESIDENT';

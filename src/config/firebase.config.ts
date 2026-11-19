@@ -21,23 +21,33 @@ export interface FirebaseConfigValidation {
   config: FirebaseClientConfig | null;
 }
 
-// Safe environment lookup supporting both Vite runtime and raw Node/tsx CLI verification
-const env: Record<string, any> =
-  typeof import.meta !== 'undefined' && (import.meta as any).env
-    ? (import.meta as any).env
-    : typeof process !== 'undefined' && process.env
-    ? process.env
-    : {};
+// Node/tsx CLI fallback ONLY (never prevents Vite static `import.meta.env.VITE_*` inlining)
+const nodeEnv: Record<string, string | undefined> =
+  typeof process !== 'undefined' && process.env ? process.env : {};
+
+// IMPORTANT: Always use direct static `import.meta.env.VITE_*` member expressions so Vite
+// statically replaces and embeds all production Firebase config variables during `vite build`.
+const VITE_API_KEY = import.meta.env?.VITE_FIREBASE_API_KEY ?? nodeEnv.VITE_FIREBASE_API_KEY ?? '';
+const VITE_AUTH_DOMAIN = import.meta.env?.VITE_FIREBASE_AUTH_DOMAIN ?? nodeEnv.VITE_FIREBASE_AUTH_DOMAIN ?? '';
+const VITE_PROJECT_ID = import.meta.env?.VITE_FIREBASE_PROJECT_ID ?? nodeEnv.VITE_FIREBASE_PROJECT_ID ?? '';
+const VITE_STORAGE_BUCKET = import.meta.env?.VITE_FIREBASE_STORAGE_BUCKET ?? nodeEnv.VITE_FIREBASE_STORAGE_BUCKET ?? '';
+const VITE_MESSAGING_SENDER_ID = import.meta.env?.VITE_FIREBASE_MESSAGING_SENDER_ID ?? nodeEnv.VITE_FIREBASE_MESSAGING_SENDER_ID ?? '';
+const VITE_APP_ID = import.meta.env?.VITE_FIREBASE_APP_ID ?? nodeEnv.VITE_FIREBASE_APP_ID ?? '';
+const VITE_MEASUREMENT_ID = import.meta.env?.VITE_FIREBASE_MEASUREMENT_ID ?? nodeEnv.VITE_FIREBASE_MEASUREMENT_ID ?? '';
+const VITE_APP_ENV_RAW = import.meta.env?.VITE_APP_ENV ?? nodeEnv.VITE_APP_ENV ?? '';
+const VITE_ENABLE_DEV_MOCK_AUTH_RAW =
+  import.meta.env?.VITE_ENABLE_DEV_MOCK_AUTH ?? nodeEnv.VITE_ENABLE_DEV_MOCK_AUTH ?? '';
+const VITE_IS_PROD = Boolean(import.meta.env?.PROD);
 
 // Raw values from Vite environment
 export const rawFirebaseConfig: Partial<FirebaseClientConfig> = {
-  apiKey: String(env.VITE_FIREBASE_API_KEY || '').trim(),
-  authDomain: String(env.VITE_FIREBASE_AUTH_DOMAIN || '').trim(),
-  projectId: String(env.VITE_FIREBASE_PROJECT_ID || '').trim(),
-  storageBucket: String(env.VITE_FIREBASE_STORAGE_BUCKET || '').trim(),
-  messagingSenderId: String(env.VITE_FIREBASE_MESSAGING_SENDER_ID || '').trim(),
-  appId: String(env.VITE_FIREBASE_APP_ID || '').trim(),
-  measurementId: String(env.VITE_FIREBASE_MEASUREMENT_ID || '').trim(),
+  apiKey: String(VITE_API_KEY).trim(),
+  authDomain: String(VITE_AUTH_DOMAIN).trim(),
+  projectId: String(VITE_PROJECT_ID).trim(),
+  storageBucket: String(VITE_STORAGE_BUCKET).trim(),
+  messagingSenderId: String(VITE_MESSAGING_SENDER_ID).trim(),
+  appId: String(VITE_APP_ID).trim(),
+  measurementId: String(VITE_MEASUREMENT_ID).trim(),
 };
 
 /**
@@ -80,7 +90,7 @@ export function validateFirebaseConfig(): FirebaseConfigValidation {
       isValid: false,
       isPlaceholder: false,
       missingKeys,
-      errorMessage: `Missing required Firebase environment variables: ${missingKeys.join(', ')}.`,
+      errorMessage: `Missing required Firebase build environment variables: ${missingKeys.join(', ')}. Configure them in .env.production or GitHub Actions Secrets and rebuild.`,
       config: null,
     };
   }
@@ -91,7 +101,7 @@ export function validateFirebaseConfig(): FirebaseConfigValidation {
       isPlaceholder: true,
       missingKeys: [],
       errorMessage:
-        'Firebase configuration contains sample template placeholders (e.g. AIzaSyYourApiKeyHere). Please replace them with actual credentials from your Firebase Console.',
+        'Firebase configuration contains sample template placeholders (e.g. YOUR_FIREBASE_API_KEY). Replace them with real values from Firebase Console > Project Settings and rebuild.',
       config: null,
     };
   }
@@ -157,14 +167,14 @@ export const isUsingPlaceholderConfig: boolean = firebaseValidation.isPlaceholde
  * Strict Production vs Sandbox check:
  * - In production build (`PROD === true` or `VITE_APP_ENV === 'production'`) WITH valid Firebase,
  *   IS_DEV_MODE is strictly `false` (no mock auth bypasses or quick-test credentials exposed).
- * - If explicitly enabled in non-production OR Firebase keys are absent, dev sandbox mode is active.
+ * - If explicitly enabled in non-production OR Firebase keys are absent in dev, dev sandbox mode is active.
  */
 export const IS_PRODUCTION_BUILD: boolean =
-  Boolean(env.PROD) || String(env.VITE_APP_ENV || '').toLowerCase() === 'production';
+  VITE_IS_PROD || String(VITE_APP_ENV_RAW).toLowerCase() === 'production';
 
 export const IS_DEV_MODE: boolean = isFirebaseConfigured
-  ? !IS_PRODUCTION_BUILD && String(env.VITE_ENABLE_DEV_MOCK_AUTH || '').toLowerCase() === 'true'
-  : !IS_PRODUCTION_BUILD || String(env.VITE_ENABLE_DEV_MOCK_AUTH || '').toLowerCase() === 'true';
+  ? !IS_PRODUCTION_BUILD && String(VITE_ENABLE_DEV_MOCK_AUTH_RAW).toLowerCase() === 'true'
+  : !IS_PRODUCTION_BUILD || String(VITE_ENABLE_DEV_MOCK_AUTH_RAW).toLowerCase() === 'true';
 
 /**
  * Non-secret runtime diagnostics for Firebase Auth & environment troubleshooting.

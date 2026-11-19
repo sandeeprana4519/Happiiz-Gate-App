@@ -18,8 +18,8 @@ import {
 import { auth, db } from './init';
 import { collection, doc, getDoc, setDoc, query, where, getDocs, limit } from 'firebase/firestore';
 import { isFirebaseConfigured, firebaseValidation, IS_DEV_MODE } from '../../config/firebase.config';
-import { normalizeUserRole, isKnownUserRole } from '../../config/constants';
-import { UserProfile, UserRole } from '../../types/auth';
+import { normalizeUserRole, isKnownUserRole, ROOT_SUPER_ADMIN_UID } from '../../config/constants';
+import { UserProfile, UserRole, AccountStatus } from '../../types/auth';
 import { MOCK_USERS } from '../mock/mockData';
 
 export interface PhoneAuthSession {
@@ -134,34 +134,34 @@ export function mapFirebaseAuthError(error: any): string {
     case 'auth/wrong-password':
     case 'auth/invalid-credential':
     case 'auth/invalid-login-credentials':
-      return 'Invalid Login ID or Password. Please verify your credentials or tap Forgot Password.';
+      return `Invalid Login ID or Password [${code}]. Please verify your credentials or tap Forgot Password.`;
 
     case 'auth/user-disabled':
     case 'disabled-account':
-      return 'Account Disabled: Your account has been disabled or suspended. Please contact your administrator.';
+      return `Account Disabled [${code}]: Your account has been disabled or suspended. Please contact your administrator.`;
 
     case 'auth/invalid-email':
-      return 'Please enter a valid Email Address, Login ID, or Mobile Number.';
+      return 'Please enter a valid Email Address, Login ID, or Mobile Number [auth/invalid-email].';
 
     case 'permission-denied':
     case 'firestore/permission-denied':
-      return 'Access Verification Failed (permission-denied): Firestore security rules denied reading your account profile. Please ensure Firestore rules are deployed and your UID has an active profile or Custom Claims.';
+      return `Access Verification Failed [${code}]: Firestore security rules denied reading your account profile. Please ensure Firestore rules are deployed and your UID has an active profile or Custom Claims.`;
 
     case 'missing-role':
-      return 'Account Role Not Configured: Your login succeeded, but no authorized role is assigned to your account yet. Please contact your Super Admin to provision your role.';
+      return 'Account Role Not Configured [missing-role]: Your login succeeded, but no authorized role is assigned to your account yet. Please contact your Super Admin to provision your role.';
 
     case 'auth/configuration-not-found':
       return (
-        'Authentication provider is not enabled for this Firebase project. ' +
+        'Authentication provider is not enabled for this Firebase project [auth/configuration-not-found]. ' +
         'In Firebase Console > Authentication > Sign-in method, enable Email/Password (and Phone/Google if required).'
       );
 
     case 'auth/invalid-api-key':
-      return 'Invalid Firebase API Key. Please verify VITE_FIREBASE_API_KEY in your production build environment.';
+      return 'Invalid Firebase API Key [auth/invalid-api-key]. Please verify VITE_FIREBASE_API_KEY in your production build environment.';
 
     case 'auth/unauthorized-domain':
       return (
-        `Domain "${hostname}" is not authorized for Firebase Authentication. ` +
+        `Domain "${hostname}" is not authorized for Firebase Authentication [auth/unauthorized-domain]. ` +
         `In Firebase Console > Authentication > Settings > Authorized domains, add "${hostname}".`
       );
 
@@ -793,31 +793,69 @@ export function setUserStoredPassword(uid: string, newPassword: string): void {
   }
 }
 
+/**
+ * Normalizes Firestore status / accountStatus fields case-insensitively so both
+ * `{ status: "active" }` and `{ accountStatus: "ACTIVE" }` resolve consistently.
+ */
+export function normalizeAccountStatus(
+  profile: Partial<UserProfile> | null | undefined
+): AccountStatus {
+  const raw = String(profile?.accountStatus ?? profile?.status ?? 'ACTIVE')
+    .trim()
+    .toUpperCase();
+
+  switch (raw) {
+    case 'ACTIVE':
+    case 'APPROVED':
+    case 'ENABLED':
+      return 'ACTIVE';
+    case 'DISABLED':
+    case 'DEACTIVATED':
+      return 'DEACTIVATED';
+    case 'SUSPENDED':
+      return 'SUSPENDED';
+    case 'BLOCKED':
+      return 'BLOCKED';
+    case 'INACTIVE':
+      return 'INACTIVE';
+    case 'REJECTED':
+      return 'REJECTED';
+    case 'PENDING':
+      return 'PENDING';
+    default:
+      return 'ACTIVE';
+  }
+}
+
 export function assertAccountCanAuthenticate(user: UserProfile, emailHint?: string): void {
-  if (user.accountStatus === 'BLOCKED' || user.accountStatus === 'DEACTIVATED') {
+  const status = normalizeAccountStatus(user);
+
+  if (status === 'BLOCKED' || status === 'DEACTIVATED') {
     throw new Error(
       'Account Disabled: Your account has been disabled. Please contact your society administrator.'
     );
   }
-  if (user.accountStatus === 'INACTIVE') {
+  if (status === 'INACTIVE') {
     throw new Error(
       'Account Inactive: Your account is currently inactive. Please contact your administrator to reactivate access.'
     );
   }
-  if (user.accountStatus === 'SUSPENDED') {
+  if (status === 'SUSPENDED') {
     throw new Error(
       'Account Suspended: Your account is temporarily suspended. Please contact your administrator.'
     );
   }
-  if (user.accountStatus === 'REJECTED') {
+  if (status === 'REJECTED') {
     throw new Error(
       'Application Rejected: Your account verification was declined. Please contact your administrator.'
     );
   }
 
-  const resolvedRole = normalizeUserRole(user.primaryRole || (user.isSuperAdmin ? 'SUPER_ADMIN' : 'RESIDENT'));
+  const resolvedRole = normalizeUserRole(
+    user.primaryRole || user.role || (user.isSuperAdmin ? 'SUPER_ADMIN' : 'RESIDENT')
+  );
   if (resolvedRole === 'SERVICE_PARTNER') {
-    let pStatus = String(user.accountStatus || '').toUpperCase();
+    let pStatus = String(status).toUpperCase();
     if (IS_DEV_MODE) {
       try {
         const saPartnersRaw = localStorage.getItem('happiiz_sa_partners');
@@ -852,15 +890,20 @@ export function assertAccountCanAuthenticate(user: UserProfile, emailHint?: stri
 }
 
 /**
- * Authoritative role resolution combining Firebase Auth Custom Claims and Firestore /users/{uid}.
+ * Authoritative role resolution combining verified Firebase Auth UID, Custom Claims, and Firestore /users/{uid}.
  * NEVER grants privileges based on email address alone or frontend-supplied role parameters.
  */
 export function resolveVerifiedRoleFromClaimsAndProfile(
   claims: Record<string, any> | null | undefined,
-  profile: UserProfile | null | undefined
+  profile: UserProfile | null | undefined,
+  authenticatedUid?: string | null
 ): { role: UserRole | null; isSuperAdmin: boolean; rawClaimRole?: string } {
+  const isVerifiedRootUid = Boolean(
+    authenticatedUid && ROOT_SUPER_ADMIN_UID && authenticatedUid.trim() === ROOT_SUPER_ADMIN_UID
+  );
   const claimRoleRaw = typeof claims?.role === 'string' ? claims.role.trim().toUpperCase() : '';
-  const claimIsSuperAdmin = claims?.isSuperAdmin === true || claimRoleRaw === 'SUPER_ADMIN';
+  const claimIsSuperAdmin =
+    isVerifiedRootUid || claims?.isSuperAdmin === true || claimRoleRaw === 'SUPER_ADMIN';
 
   if (claimIsSuperAdmin) {
     return { role: 'SUPER_ADMIN', isSuperAdmin: true, rawClaimRole: 'SUPER_ADMIN' };
@@ -957,8 +1000,8 @@ export async function signInWithEmail(
           firestoreProfile = { uid: credential.user.uid, ...userSnap.data() } as UserProfile;
         }
       } catch (fsErr: any) {
-        // If Custom Claims already verify SUPER_ADMIN, do not lock out due to missing/unreadable doc
-        const claimCheck = resolveVerifiedRoleFromClaimsAndProfile(claims, null);
+        // If Custom Claims or verified Root Super Admin UID already verify SUPER_ADMIN, do not lock out
+        const claimCheck = resolveVerifiedRoleFromClaimsAndProfile(claims, null, credential.user.uid);
         if (!claimCheck.isSuperAdmin) {
           await signOutFirebase();
           throw new Error(mapFirebaseAuthError(fsErr));
@@ -966,8 +1009,12 @@ export async function signInWithEmail(
       }
     }
 
-    // 3. Combine Custom Claims + Firestore profile strictly bound to authenticated UID
-    const verified = resolveVerifiedRoleFromClaimsAndProfile(claims, firestoreProfile);
+    // 3. Combine Verified Auth UID + Custom Claims + Firestore profile
+    const verified = resolveVerifiedRoleFromClaimsAndProfile(
+      claims,
+      firestoreProfile,
+      credential.user.uid
+    );
 
     if (!verified.role) {
       await signOutFirebase();
@@ -977,11 +1024,30 @@ export async function signInWithEmail(
     }
 
     const nowIso = new Date().toISOString();
+    const normalizedStatus = normalizeAccountStatus(firestoreProfile);
+    const effectiveStatus: AccountStatus =
+      verified.isSuperAdmin &&
+      normalizedStatus !== 'SUSPENDED' &&
+      normalizedStatus !== 'BLOCKED' &&
+      normalizedStatus !== 'DEACTIVATED' &&
+      normalizedStatus !== 'INACTIVE'
+        ? 'ACTIVE'
+        : normalizedStatus;
+    const resolvedFullName =
+      firestoreProfile?.fullName ||
+      firestoreProfile?.displayName ||
+      credential.user.displayName ||
+      (verified.isSuperAdmin ? 'Platform Super Admin' : 'Verified User');
+
     const liveProfile: UserProfile = firestoreProfile
       ? {
           ...firestoreProfile,
           uid: credential.user.uid,
+          fullName: resolvedFullName,
+          displayName: firestoreProfile.displayName || resolvedFullName,
           email: firestoreProfile.email || credential.user.email || loginEmail,
+          phoneNumber: firestoreProfile.phoneNumber || credential.user.phoneNumber || '',
+          preferredLanguage: firestoreProfile.preferredLanguage || 'en',
           isSuperAdmin: verified.isSuperAdmin || firestoreProfile.isSuperAdmin === true,
           primaryRole: verified.role,
           role: verified.role,
@@ -991,17 +1057,23 @@ export async function signInWithEmail(
           gateAssigned: (claims.gateAssigned as string) || firestoreProfile.gateAssigned,
           onboardingCompleted:
             verified.isSuperAdmin ? true : firestoreProfile.onboardingCompleted !== false,
-          accountStatus: firestoreProfile.accountStatus || 'ACTIVE',
+          accountStatus: effectiveStatus,
+          status:
+            firestoreProfile.status ||
+            (effectiveStatus === 'ACTIVE' ? 'active' : effectiveStatus.toLowerCase()),
+          createdAt: firestoreProfile.createdAt || nowIso,
+          updatedAt: nowIso,
           lastLoginAt: nowIso,
         }
       : {
           uid: credential.user.uid,
-          fullName: credential.user.displayName || (verified.isSuperAdmin ? 'Platform Super Admin' : 'Verified User'),
-          displayName: credential.user.displayName || (verified.isSuperAdmin ? 'Platform Super Admin' : 'Verified User'),
+          fullName: resolvedFullName,
+          displayName: resolvedFullName,
           email: credential.user.email || loginEmail,
           phoneNumber: credential.user.phoneNumber || '',
           preferredLanguage: 'en',
-          accountStatus: 'ACTIVE',
+          accountStatus: effectiveStatus,
+          status: effectiveStatus === 'ACTIVE' ? 'active' : effectiveStatus.toLowerCase(),
           onboardingCompleted: true,
           createdAt: nowIso,
           updatedAt: nowIso,
@@ -1019,12 +1091,43 @@ export async function signInWithEmail(
               : undefined,
         };
 
-    // If verified Super Admin via Custom Claims had no Firestore user doc yet, sync it cleanly
-    if (!firestoreProfile && verified.isSuperAdmin && db) {
+    // Auto-create / repair Firestore /users/{uid} for verified Super Admin (never writes passwords)
+    const needsSuperAdminDocSync =
+      verified.isSuperAdmin &&
+      (!firestoreProfile ||
+        !firestoreProfile.fullName ||
+        !firestoreProfile.displayName ||
+        !firestoreProfile.accountStatus ||
+        firestoreProfile.primaryRole !== 'SUPER_ADMIN' ||
+        firestoreProfile.role !== 'SUPER_ADMIN' ||
+        firestoreProfile.isSuperAdmin !== true ||
+        firestoreProfile.onboardingCompleted !== true);
+
+    if (needsSuperAdminDocSync && db) {
       try {
-        await setDoc(doc(db, 'users', credential.user.uid), liveProfile, { merge: true });
+        await setDoc(
+          doc(db, 'users', credential.user.uid),
+          {
+            uid: credential.user.uid,
+            fullName: liveProfile.fullName,
+            displayName: liveProfile.displayName || liveProfile.fullName,
+            email: liveProfile.email || loginEmail,
+            phoneNumber: liveProfile.phoneNumber || '',
+            preferredLanguage: liveProfile.preferredLanguage || 'en',
+            primaryRole: 'SUPER_ADMIN',
+            role: 'SUPER_ADMIN',
+            isSuperAdmin: true,
+            accountStatus: 'ACTIVE',
+            status: 'active',
+            onboardingCompleted: true,
+            createdAt: liveProfile.createdAt || nowIso,
+            updatedAt: nowIso,
+            lastLoginAt: nowIso,
+          },
+          { merge: true }
+        );
       } catch (syncErr) {
-        console.warn('[AuthService] Optional Super Admin profile sync skipped:', syncErr);
+        console.warn('[AuthService] Super Admin Firestore auto-bootstrap skipped:', syncErr);
       }
     }
 
@@ -1041,7 +1144,10 @@ export async function signInWithEmail(
 
   // SANDBOX / LOCAL DEV PATH (IS_DEV_MODE === true only)
   if (!IS_DEV_MODE) {
-    throw new Error('Firebase authentication is required in production mode. Please configure VITE_FIREBASE_* variables.');
+    throw new Error(
+      firebaseValidation.errorMessage ||
+        'Firebase authentication is required in production mode. Please configure VITE_FIREBASE_* environment variables and rebuild.'
+    );
   }
 
   const user = await findRegisteredUserByIdentifier(trimmedInput);

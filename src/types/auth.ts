@@ -52,6 +52,7 @@ export interface UserProfile {
   photoURL?: string;
   preferredLanguage: string;
   accountStatus: AccountStatus;
+  status?: string; // Compatibility alias for Firestore docs using status: "active"
   rejectionReason?: string;
   suspendedReason?: string;
   createdAt: string;
@@ -218,6 +219,6 @@ export interface AuthContextType {
   switchRole: (role: UserRole) => void;
   loginWithDemoRole: (role: UserRole) => void;
   loginWithDemoSession: (profile: UserProfile) => void;
-  refreshUserProfile: () => Promise<void>;
+  refreshUserProfile: (verifiedProfile?: UserProfile) => Promise<void>;
   logout: () => Promise<void>;
 }

@@ -5,7 +5,8 @@
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { auth } from '../services/firebase/init';
+import { doc, setDoc } from 'firebase/firestore';
+import { auth, db } from '../services/firebase/init';
 import { isFirebaseConfigured, IS_DEV_MODE } from '../config/firebase.config';
 import { normalizeUserRole } from '../config/constants';
 import {
@@ -23,6 +24,7 @@ import {
 import {
   signOutFirebase,
   resolveVerifiedRoleFromClaimsAndProfile,
+  normalizeAccountStatus,
 } from '../services/firebase/auth.service';
 import { MOCK_USERS, MOCK_MEMBERSHIPS } from '../services/mock/mockData';
 
@@ -54,7 +56,7 @@ function buildMembershipsForProfile(profile: UserProfile): SocietyMembership[] {
         societyName: profile.societyName || 'Assigned Society',
         societyCode: profile.societyCode || 'SOC',
         role,
-        membershipStatus: profile.accountStatus === 'ACTIVE' ? 'ACTIVE' : 'SUSPENDED',
+        membershipStatus: normalizeAccountStatus(profile) === 'ACTIVE' ? 'ACTIVE' : 'SUSPENDED',
         employmentId: profile.societyStaffId || profile.loginId,
         joinedAt: profile.createdAt || new Date().toISOString(),
         approvedBy: 'SOCIETY_ADMIN',
@@ -96,16 +98,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.warn('[AuthContext] Firestore profile read notice:', profileErr);
       }
 
-      // 3. Resolve verified role from Custom Claims + Firestore (never from localStorage or email alone)
-      const verified = resolveVerifiedRoleFromClaimsAndProfile(tokenClaims, profile);
+      // 3. Resolve verified role from Verified Auth UID + Custom Claims + Firestore (never from localStorage or email alone)
+      const verified = resolveVerifiedRoleFromClaimsAndProfile(tokenClaims, profile, fbUserObj?.uid);
 
       if (profile || verified.role) {
         const nowIso = new Date().toISOString();
+        const normalizedStatus = normalizeAccountStatus(profile);
+        const effectiveStatus =
+          verified.isSuperAdmin &&
+          normalizedStatus !== 'SUSPENDED' &&
+          normalizedStatus !== 'BLOCKED' &&
+          normalizedStatus !== 'DEACTIVATED' &&
+          normalizedStatus !== 'INACTIVE'
+            ? 'ACTIVE'
+            : normalizedStatus;
+        const resolvedFullName =
+          profile?.fullName ||
+          profile?.displayName ||
+          fbUserObj?.displayName ||
+          (verified.isSuperAdmin ? 'Platform Super Admin' : 'Verified User');
+
         const mergedProfile: UserProfile = profile
           ? {
               ...profile,
               uid,
+              fullName: resolvedFullName,
+              displayName: profile.displayName || resolvedFullName,
               email: profile.email || fbUserObj?.email || undefined,
+              phoneNumber: profile.phoneNumber || fbUserObj?.phoneNumber || '',
+              preferredLanguage: profile.preferredLanguage || 'en',
               isSuperAdmin: verified.isSuperAdmin || profile.isSuperAdmin === true,
               primaryRole: verified.role || profile.primaryRole || profile.role,
               role: verified.role || profile.role || profile.primaryRole,
@@ -113,18 +134,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               societyId: (tokenClaims.societyId as string) || profile.societyId,
               companyId: (tokenClaims.companyId as string) || profile.companyId,
               gateAssigned: (tokenClaims.gateAssigned as string) || profile.gateAssigned,
-              onboardingCompleted: verified.isSuperAdmin ? true : profile.onboardingCompleted,
-              accountStatus: profile.accountStatus || 'ACTIVE',
+              onboardingCompleted: verified.isSuperAdmin ? true : profile.onboardingCompleted !== false,
+              accountStatus: effectiveStatus,
+              status:
+                profile.status ||
+                (effectiveStatus === 'ACTIVE' ? 'active' : effectiveStatus.toLowerCase()),
             }
           : {
               uid,
-              fullName: fbUserObj?.displayName || (verified.isSuperAdmin ? 'Platform Super Admin' : 'Verified User'),
-              displayName: fbUserObj?.displayName || (verified.isSuperAdmin ? 'Platform Super Admin' : 'Verified User'),
+              fullName: resolvedFullName,
+              displayName: resolvedFullName,
               email: fbUserObj?.email || undefined,
               phoneNumber: fbUserObj?.phoneNumber || '',
               photoURL: fbUserObj?.photoURL || undefined,
               preferredLanguage: 'en',
-              accountStatus: 'ACTIVE',
+              accountStatus: effectiveStatus,
+              status: effectiveStatus === 'ACTIVE' ? 'active' : effectiveStatus.toLowerCase(),
               onboardingCompleted: true,
               createdAt: nowIso,
               updatedAt: nowIso,
@@ -141,6 +166,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   ? verified.rawClaimRole
                   : undefined,
             };
+
+        // Auto-create / repair Firestore /users/{uid} for verified Super Admin if missing optional fields
+        if (
+          verified.isSuperAdmin &&
+          db &&
+          fbUserObj &&
+          (!profile ||
+            !profile.fullName ||
+            !profile.displayName ||
+            !profile.accountStatus ||
+            profile.primaryRole !== 'SUPER_ADMIN' ||
+            profile.role !== 'SUPER_ADMIN' ||
+            profile.isSuperAdmin !== true ||
+            profile.onboardingCompleted !== true)
+        ) {
+          try {
+            await setDoc(
+              doc(db, 'users', uid),
+              {
+                uid,
+                fullName: mergedProfile.fullName,
+                displayName: mergedProfile.displayName || mergedProfile.fullName,
+                email: mergedProfile.email || '',
+                phoneNumber: mergedProfile.phoneNumber || '',
+                preferredLanguage: mergedProfile.preferredLanguage || 'en',
+                primaryRole: 'SUPER_ADMIN',
+                role: 'SUPER_ADMIN',
+                isSuperAdmin: true,
+                accountStatus: 'ACTIVE',
+                status: 'active',
+                onboardingCompleted: true,
+                createdAt: mergedProfile.createdAt || nowIso,
+                updatedAt: nowIso,
+                lastLoginAt: nowIso,
+              },
+              { merge: true }
+            );
+          } catch (syncErr) {
+            console.warn('[AuthContext] Super Admin Firestore auto-bootstrap skipped:', syncErr);
+          }
+        }
 
         setUser(mergedProfile);
         try {
@@ -335,9 +401,71 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem(ACTIVE_MEMBERSHIP_KEY, membership.societyId);
   };
 
-  const refreshUserProfile = async () => {
-    if (firebaseUser) {
-      await loadUserData(firebaseUser.uid, firebaseUser);
+  const refreshUserProfile = async (verifiedProfile?: UserProfile) => {
+    const activeFbUser = auth?.currentUser || firebaseUser;
+
+    if (verifiedProfile) {
+      if (activeFbUser) {
+        setFirebaseUser(activeFbUser);
+      }
+      const normalizedStatus = normalizeAccountStatus(verifiedProfile);
+      const hydratedProfile: UserProfile = {
+        ...verifiedProfile,
+        accountStatus: normalizedStatus,
+        status:
+          verifiedProfile.status ||
+          (normalizedStatus === 'ACTIVE' ? 'active' : normalizedStatus.toLowerCase()),
+        onboardingCompleted:
+          verifiedProfile.isSuperAdmin ||
+          normalizeUserRole(verifiedProfile.primaryRole || verifiedProfile.role) === 'SUPER_ADMIN'
+            ? true
+            : verifiedProfile.onboardingCompleted !== false,
+      };
+      setUser(hydratedProfile);
+      try {
+        localStorage.setItem(SESSION_LAST_ACTIVITY_KEY, String(Date.now()));
+      } catch (_) {}
+
+      const resolvedRole = normalizeUserRole(hydratedProfile.primaryRole || hydratedProfile.role);
+      if (
+        hydratedProfile.isSuperAdmin ||
+        resolvedRole === 'SUPER_ADMIN' ||
+        resolvedRole === 'PLATFORM_STAFF' ||
+        resolvedRole === 'DIGITAL_SUPPORTER'
+      ) {
+        setMemberships([]);
+        setActiveMembershipState(null);
+        setLoading(false);
+        return;
+      }
+
+      if (activeFbUser && isFirebaseConfigured) {
+        try {
+          if (resolvedRole === 'SERVICE_PARTNER') {
+            const partner = await getServicePartnerProfile(activeFbUser.uid);
+            setServicePartnerProfile(partner);
+          }
+          const userMemberships = await getUserSocietyMemberships(activeFbUser.uid);
+          setMemberships(userMemberships);
+          const savedMembershipId = localStorage.getItem(ACTIVE_MEMBERSHIP_KEY);
+          const matched = userMemberships.find((m) => m.societyId === savedMembershipId);
+          if (matched && matched.membershipStatus === 'ACTIVE') {
+            setActiveMembershipState(matched);
+          } else {
+            const firstActive = userMemberships.find((m) => m.membershipStatus === 'ACTIVE');
+            setActiveMembershipState(firstActive || userMemberships[0] || null);
+          }
+        } catch (err) {
+          console.warn('[AuthContext] Error refreshing memberships:', err);
+        }
+      }
+      setLoading(false);
+      return;
+    }
+
+    if (activeFbUser) {
+      setFirebaseUser(activeFbUser);
+      await loadUserData(activeFbUser.uid, activeFbUser);
     } else if (user && IS_DEV_MODE) {
       await loadUserData(user.uid);
     }

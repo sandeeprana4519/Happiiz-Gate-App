@@ -8,6 +8,7 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { UserRole } from '../types/auth';
 import { rolesMatch } from '../config/constants';
+import { normalizeAccountStatus } from '../services/firebase/auth.service';
 import { LoadingScreen } from '../components/common/LoadingScreen';
 
 interface ProtectedRouteProps {
@@ -45,31 +46,39 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     );
   }
 
-  // If user profile has not completed onboarding
-  if (!user.onboardingCompleted) {
+  const isSuperAdmin = Boolean(
+    user.isSuperAdmin ||
+      rolesMatch(currentRole, 'SUPER_ADMIN') ||
+      rolesMatch(user.primaryRole, 'SUPER_ADMIN') ||
+      rolesMatch(user.role, 'SUPER_ADMIN')
+  );
+
+  // If user profile has not completed onboarding (never bounce verified Super Admin)
+  if (!user.onboardingCompleted && !isSuperAdmin) {
     return <Navigate to="/onboarding" replace />;
   }
 
-  // Check account status including INACTIVE and DEACTIVATED
+  // Check normalized account status (supports both accountStatus: "ACTIVE" and status: "active")
+  const status = normalizeAccountStatus(user);
   if (
-    user.accountStatus === 'BLOCKED' ||
-    user.accountStatus === 'SUSPENDED' ||
-    user.accountStatus === 'INACTIVE' ||
-    user.accountStatus === 'DEACTIVATED'
+    status === 'BLOCKED' ||
+    status === 'SUSPENDED' ||
+    status === 'INACTIVE' ||
+    status === 'DEACTIVATED'
   ) {
     return <Navigate to="/status/suspended" replace />;
   }
 
-  if (user.accountStatus === 'REJECTED') {
+  if (status === 'REJECTED') {
     return <Navigate to="/status/rejected" replace />;
   }
 
-  if (user.accountStatus === 'PENDING') {
+  if (status === 'PENDING' && !isSuperAdmin) {
     return <Navigate to="/status/pending" replace />;
   }
 
   // Strictly enforce active society membership for society-scoped portals
-  if (requireActiveMembership && !user.isSuperAdmin && !rolesMatch(user.primaryRole, 'SUPER_ADMIN')) {
+  if (requireActiveMembership && !isSuperAdmin) {
     if (!activeMembership || activeMembership.membershipStatus !== 'ACTIVE') {
       return <Navigate to="/status/pending" replace />;
     }

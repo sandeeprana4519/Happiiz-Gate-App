@@ -12,12 +12,13 @@ service firebase.storage {
 
     function isSuperAdmin() {
       return isAuthenticated() && (
-        request.auth.token.role == 'SUPER_ADMIN' ||
-        request.auth.token.isSuperAdmin == true ||
+        request.auth.uid == 'i2INKUJ27fZpwFKOBV5o7qOm4it2' ||
+        request.auth.token.get('role', '') == 'SUPER_ADMIN' ||
+        request.auth.token.get('isSuperAdmin', false) == true ||
         (firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)) &&
-         (firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.primaryRole == 'SUPER_ADMIN' ||
-          firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'SUPER_ADMIN' ||
-          firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.isSuperAdmin == true))
+         (firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.get('primaryRole', '') == 'SUPER_ADMIN' ||
+          firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.get('role', '') == 'SUPER_ADMIN' ||
+          firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.get('isSuperAdmin', false) == true))
       );
     }
 

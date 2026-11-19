@@ -13,7 +13,7 @@ import { LegalModal } from '../../components/common/LegalModal';
 import { SecurityShield3D } from '../../components/visuals/SecurityShield3D';
 import { UserRole, UserProfile } from '../../types/auth';
 import { getRoleDefaultRoute, normalizeUserRole } from '../../config/constants';
-import { isFirebaseConfigured } from '../../config/firebase.config';
+import { isFirebaseConfigured, firebaseValidation } from '../../config/firebase.config';
 import {
   signInWithEmail,
   googleLoginWithRegisteredEmailCheck,
@@ -23,6 +23,7 @@ import {
   finalizePasswordReset,
   sendFirebasePasswordReset,
   validatePasswordStrength,
+  normalizeAccountStatus,
 } from '../../services/firebase/auth.service';
 import { SUPPORTED_COUNTRY_CODES, normalizeToE164 } from '../../services/firebase/phone.utils';
 import {
@@ -50,7 +51,15 @@ const DEV_SANDBOX_PASSWORD = import.meta.env.DEV
   : '';
 
 export const LoginPage: React.FC = () => {
-  const { loginWithDemoSession, refreshUserProfile, isDevMode, sessionWarning } = useAuth();
+  const {
+    user: authenticatedUser,
+    currentRole,
+    loading: authLoading,
+    loginWithDemoSession,
+    refreshUserProfile,
+    isDevMode,
+    sessionWarning,
+  } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const queryParams = new URLSearchParams(location.search);
@@ -99,6 +108,17 @@ export const LoginPage: React.FC = () => {
     } catch (_) {}
   }, []);
 
+  // Auto-redirect already authenticated users directly to their verified dashboard
+  useEffect(() => {
+    if (authLoading || !authenticatedUser || !currentRole || view !== 'LOGIN') return;
+    const status = normalizeAccountStatus(authenticatedUser);
+    if (status !== 'ACTIVE') return;
+    const defaultRoute = getRoleDefaultRoute(currentRole);
+    const targetRoute =
+      returnToPath && returnToPath.startsWith(defaultRoute) ? returnToPath : defaultRoute;
+    navigate(targetRoute, { replace: true });
+  }, [authLoading, authenticatedUser, currentRole, view, returnToPath, navigate]);
+
   // OTP Cooldown Countdown
   useEffect(() => {
     if (otpCooldown > 0) {
@@ -119,7 +139,7 @@ export const LoginPage: React.FC = () => {
     );
 
     if (role === 'SERVICE_PARTNER') {
-      const pStatus = String(profile.accountStatus || '').toUpperCase();
+      const pStatus = normalizeAccountStatus(profile);
       if (pStatus === 'PENDING') {
         setError(
           'Application Under Review: Your profile and documents are pending verification by Super Admin. You will receive login access once approved.'
@@ -134,9 +154,9 @@ export const LoginPage: React.FC = () => {
       }
     }
 
-    // Sync AuthContext cleanly: live Firebase refreshes verified Firestore state; sandbox uses dev session
+    // Sync AuthContext cleanly BEFORE navigating so ProtectedRoute never sees null user
     if (isFirebaseConfigured && !isDevMode) {
-      await refreshUserProfile();
+      await refreshUserProfile(profile);
     } else {
       loginWithDemoSession(profile);
     }
@@ -434,6 +454,20 @@ export const LoginPage: React.FC = () => {
 
       {/* Main Universal Authentication Card (Premium Purple + Clean White) */}
       <div className="w-full rounded-2xl bg-[#FFFFFF] border border-[#673AB7]/15 shadow-[0_12px_40px_rgba(103,58,183,0.10)] p-6 sm:p-8">
+        {/* Production Firebase Misconfiguration Banner (Never fails silently) */}
+        {!isDevMode && !isFirebaseConfigured && (
+          <div className="mb-5 p-3.5 rounded-xl bg-amber-50 border border-amber-300 text-xs text-amber-950 font-medium flex items-start gap-2">
+            <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5 text-amber-700" />
+            <div className="space-y-1 leading-relaxed">
+              <div className="font-bold">Production Firebase Configuration Required</div>
+              <div>
+                {firebaseValidation.errorMessage ||
+                  'Firebase credentials were not bundled in this production build. Configure VITE_FIREBASE_* environment variables and redeploy.'}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Session Expiration Notice */}
         {sessionWarning && !error && (
           <div className="mb-5 p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 font-medium flex items-start gap-2">

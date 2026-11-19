@@ -29,20 +29,20 @@ service cloud.firestore {
 
     function isAccountActive() {
       return !userDocExists() || (
-        getUserData().accountStatus != 'SUSPENDED' &&
-        getUserData().accountStatus != 'REJECTED' &&
-        getUserData().accountStatus != 'INACTIVE'
+        !(getUserData().get('accountStatus', '') in ['SUSPENDED', 'REJECTED', 'INACTIVE', 'BLOCKED', 'DEACTIVATED', 'suspended', 'rejected', 'inactive', 'blocked', 'deactivated']) &&
+        !(getUserData().get('status', '') in ['SUSPENDED', 'REJECTED', 'INACTIVE', 'BLOCKED', 'DEACTIVATED', 'suspended', 'rejected', 'inactive', 'blocked', 'deactivated'])
       );
     }
 
     function isSuperAdmin() {
       return isAuthenticated() && (
-        request.auth.token.role == 'SUPER_ADMIN' ||
-        request.auth.token.isSuperAdmin == true ||
+        request.auth.uid == 'i2INKUJ27fZpwFKOBV5o7qOm4it2' ||
+        request.auth.token.get('role', '') == 'SUPER_ADMIN' ||
+        request.auth.token.get('isSuperAdmin', false) == true ||
         (userDocExists() && (
-          getUserData().role == 'SUPER_ADMIN' ||
-          getUserData().primaryRole == 'SUPER_ADMIN' ||
-          getUserData().isSuperAdmin == true
+          getUserData().get('role', '') == 'SUPER_ADMIN' ||
+          getUserData().get('primaryRole', '') == 'SUPER_ADMIN' ||
+          getUserData().get('isSuperAdmin', false) == true
         ))
       );
     }
@@ -61,20 +61,20 @@ service cloud.firestore {
 
     function isPlatformStaff() {
       return isAuthenticated() && isAccountActive() && (
-        isPlatformRoleValue(request.auth.token.role) ||
+        isPlatformRoleValue(request.auth.token.get('role', '')) ||
         (userDocExists() && (
-          isPlatformRoleValue(getUserData().primaryRole) ||
-          isPlatformRoleValue(getUserData().role)
+          isPlatformRoleValue(getUserData().get('primaryRole', '')) ||
+          isPlatformRoleValue(getUserData().get('role', ''))
         ))
       );
     }
 
     function isDigitalSupporter() {
       return isAuthenticated() && isAccountActive() && (
-        request.auth.token.role in ['DIGITAL_SUPPORTER', 'PLATFORM_SUPPORT'] ||
+        request.auth.token.get('role', '') in ['DIGITAL_SUPPORTER', 'PLATFORM_SUPPORT'] ||
         (userDocExists() && (
-          getUserData().primaryRole in ['DIGITAL_SUPPORTER', 'PLATFORM_SUPPORT'] ||
-          getUserData().role in ['DIGITAL_SUPPORTER', 'PLATFORM_SUPPORT']
+          getUserData().get('primaryRole', '') in ['DIGITAL_SUPPORTER', 'PLATFORM_SUPPORT'] ||
+          getUserData().get('role', '') in ['DIGITAL_SUPPORTER', 'PLATFORM_SUPPORT']
         ))
       );
     }
