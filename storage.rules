@@ -13,8 +13,11 @@ service firebase.storage {
     function isSuperAdmin() {
       return isAuthenticated() && (
         request.auth.token.role == 'SUPER_ADMIN' ||
+        request.auth.token.isSuperAdmin == true ||
         (firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)) &&
-         firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.primaryRole == 'SUPER_ADMIN')
+         (firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.primaryRole == 'SUPER_ADMIN' ||
+          firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'SUPER_ADMIN' ||
+          firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.isSuperAdmin == true))
       );
     }
 
@@ -34,7 +37,7 @@ service firebase.storage {
         (
           firestore.exists(/databases/(default)/documents/societies/$(societyId)/members/$(request.auth.uid)) &&
           firestore.get(/databases/(default)/documents/societies/$(societyId)/members/$(request.auth.uid)).data.membershipStatus == 'ACTIVE' &&
-          firestore.get(/databases/(default)/documents/societies/$(societyId)/members/$(request.auth.uid)).data.role in ['SOCIETY_ADMIN', 'SECURITY_STAFF', 'SECURITY_GUARD', 'GATE_GUARD']
+          firestore.get(/databases/(default)/documents/societies/$(societyId)/members/$(request.auth.uid)).data.role in ['SOCIETY_ADMIN', 'COMPANY_ADMIN', 'SECURITY_STAFF', 'SECURITY_SUPERVISOR', 'SECURITY_GUARD', 'GATE_GUARD']
         )
       );
     }
@@ -91,6 +94,17 @@ service firebase.storage {
     match /anpr/{societyId}/{allPaths=**} {
       allow read: if isSocietyAdminOrSecurity(societyId);
       allow write: if isSocietyAdminOrSecurity(societyId) && isImage() && isUnder5MB();
+    }
+
+    // 6. Platform & Society Logos (Super Admin controlled)
+    match /logos/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if isSuperAdmin() && isImage() && isUnder5MB();
+    }
+
+    match /platform/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if isSuperAdmin() && isDocumentMime() && isUnder10MB();
     }
 
     // Default explicit deny

@@ -78,7 +78,7 @@ export const PartnerOnboardingModal: React.FC<PartnerOnboardingModalProps> = ({
   const [businessName, setBusinessName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('Partner@2026');
+  const [password, setPassword] = useState('');
   const [address, setAddress] = useState('');
 
   // Section 2: Service Area & Mapping
@@ -303,7 +303,7 @@ export const PartnerOnboardingModal: React.FC<PartnerOnboardingModalProps> = ({
         contactNumber: phone.trim(),
         phone: phone.trim(),
         email: email.trim().toLowerCase(),
-        password: password || 'Partner@2026',
+        password: password.trim(),
         businessAddress: address.trim() || currentSociety?.address || 'Locality Hub',
         address: address.trim(),
         serviceCategories: categories.length > 0 ? categories : ['General Maintenance'],

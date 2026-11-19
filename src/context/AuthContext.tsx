@@ -20,7 +20,10 @@ import {
   getUserSocietyMemberships,
   getServicePartnerProfile,
 } from '../services/firebase/firestore.service';
-import { signOutFirebase } from '../services/firebase/auth.service';
+import {
+  signOutFirebase,
+  resolveVerifiedRoleFromClaimsAndProfile,
+} from '../services/firebase/auth.service';
 import { MOCK_USERS, MOCK_MEMBERSHIPS } from '../services/mock/mockData';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -73,15 +76,80 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loadUserData = useCallback(async (uid: string, fbUserObj?: FirebaseUser | null) => {
     try {
       setLoading(true);
-      const profile = await getFirestoreUserProfile(uid);
 
-      if (profile) {
-        setUser(profile);
-        localStorage.setItem(SESSION_LAST_ACTIVITY_KEY, String(Date.now()));
+      // 1. Read verified Firebase Custom Claims from ID Token when live Firebase Auth is active
+      let tokenClaims: Record<string, any> = {};
+      if (fbUserObj) {
+        try {
+          const tokenResult = await fbUserObj.getIdTokenResult();
+          tokenClaims = tokenResult.claims || {};
+        } catch (claimErr) {
+          console.warn('[AuthContext] Unable to read Firebase Custom Claims:', claimErr);
+        }
+      }
 
-        const resolvedRole = normalizeUserRole(profile.primaryRole || profile.role);
+      // 2. Read authoritative Firestore /users/{uid} document
+      let profile: UserProfile | null = null;
+      try {
+        profile = await getFirestoreUserProfile(uid);
+      } catch (profileErr) {
+        console.warn('[AuthContext] Firestore profile read notice:', profileErr);
+      }
 
-        if (profile.isSuperAdmin || resolvedRole === 'SUPER_ADMIN') {
+      // 3. Resolve verified role from Custom Claims + Firestore (never from localStorage or email alone)
+      const verified = resolveVerifiedRoleFromClaimsAndProfile(tokenClaims, profile);
+
+      if (profile || verified.role) {
+        const nowIso = new Date().toISOString();
+        const mergedProfile: UserProfile = profile
+          ? {
+              ...profile,
+              uid,
+              email: profile.email || fbUserObj?.email || undefined,
+              isSuperAdmin: verified.isSuperAdmin || profile.isSuperAdmin === true,
+              primaryRole: verified.role || profile.primaryRole || profile.role,
+              role: verified.role || profile.role || profile.primaryRole,
+              customClaimsRole: verified.rawClaimRole || profile.customClaimsRole,
+              societyId: (tokenClaims.societyId as string) || profile.societyId,
+              companyId: (tokenClaims.companyId as string) || profile.companyId,
+              gateAssigned: (tokenClaims.gateAssigned as string) || profile.gateAssigned,
+              onboardingCompleted: verified.isSuperAdmin ? true : profile.onboardingCompleted,
+              accountStatus: profile.accountStatus || 'ACTIVE',
+            }
+          : {
+              uid,
+              fullName: fbUserObj?.displayName || (verified.isSuperAdmin ? 'Platform Super Admin' : 'Verified User'),
+              displayName: fbUserObj?.displayName || (verified.isSuperAdmin ? 'Platform Super Admin' : 'Verified User'),
+              email: fbUserObj?.email || undefined,
+              phoneNumber: fbUserObj?.phoneNumber || '',
+              photoURL: fbUserObj?.photoURL || undefined,
+              preferredLanguage: 'en',
+              accountStatus: 'ACTIVE',
+              onboardingCompleted: true,
+              createdAt: nowIso,
+              updatedAt: nowIso,
+              lastLoginAt: nowIso,
+              primaryRole: verified.role!,
+              role: verified.role!,
+              isSuperAdmin: verified.isSuperAdmin,
+              customClaimsRole: verified.rawClaimRole,
+              societyId: tokenClaims.societyId as string | undefined,
+              companyId: tokenClaims.companyId as string | undefined,
+              gateAssigned: tokenClaims.gateAssigned as string | undefined,
+              platformRole:
+                verified.rawClaimRole && verified.role === 'PLATFORM_STAFF'
+                  ? verified.rawClaimRole
+                  : undefined,
+            };
+
+        setUser(mergedProfile);
+        try {
+          localStorage.setItem(SESSION_LAST_ACTIVITY_KEY, String(Date.now()));
+        } catch (_) {}
+
+        const resolvedRole = normalizeUserRole(mergedProfile.primaryRole || mergedProfile.role);
+
+        if (mergedProfile.isSuperAdmin || resolvedRole === 'SUPER_ADMIN') {
           setMemberships([]);
           setActiveMembershipState(null);
           setLoading(false);

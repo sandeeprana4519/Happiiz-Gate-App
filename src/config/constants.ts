@@ -11,10 +11,30 @@ export const APP_TAGLINE = 'Next-Gen Society & Gate Security Management';
 export const APP_VERSION = '2.5.0-prod';
 
 export function normalizeUserRole(role?: string | null): UserRole {
-  const upper = String(role || 'RESIDENT').trim().toUpperCase();
+  const upper = String(role || '').trim().toUpperCase().replace(/[\s-]+/g, '_');
+  if (!upper) return 'RESIDENT';
+  if (upper === 'SUPER_ADMIN' || upper === 'SUPERADMIN') return 'SUPER_ADMIN';
+  if (
+    upper === 'PLATFORM_ADMIN_STAFF' ||
+    upper === 'PLATFORM_ADMIN' ||
+    upper === 'PLATFORM_SUPPORT' ||
+    upper === 'PLATFORM_FINANCE' ||
+    upper === 'PLATFORM_OPERATIONS' ||
+    upper === 'PLATFORM_READ_ONLY'
+  ) {
+    return 'PLATFORM_STAFF';
+  }
+  if (upper === 'COMPANY_ADMIN') return 'SOCIETY_ADMIN';
+  if (upper === 'SECURITY_SUPERVISOR') return 'SECURITY_STAFF';
   if (upper === 'GATE_GUARD') return 'SECURITY_GUARD';
-  if (upper === 'PLATFORM_ADMIN_STAFF') return 'PLATFORM_STAFF';
+  if (upper === 'TECHNICIAN') return 'SERVICE_PARTNER';
   return upper as UserRole;
+}
+
+export function isKnownUserRole(role?: string | null): boolean {
+  const raw = String(role || '').trim().toUpperCase().replace(/[\s-]+/g, '_');
+  if (!raw) return false;
+  return Object.prototype.hasOwnProperty.call(USER_ROLES, raw) || raw === 'SUPERADMIN';
 }
 
 export function rolesMatch(a?: string | null, b?: string | null): boolean {
@@ -54,6 +74,54 @@ const PLATFORM_STAFF_ROLE_CONFIG: RoleConfig = {
   ],
 };
 
+const SOCIETY_ADMIN_ROLE_CONFIG: RoleConfig = {
+  id: 'SOCIETY_ADMIN',
+  label: 'Society Admin',
+  title: 'Society Operations Center',
+  description: 'Resident management, staff roster, visitor policies, facility bookings & accounts.',
+  badgeColor: 'bg-blue-500/15 text-blue-500 border-blue-500/30',
+  defaultPath: '/society',
+  iconName: 'Building2',
+  capabilities: [
+    'Flats & Resident Onboarding',
+    'Security Guards & Roster Allocation',
+    'Society Maintenance & Notice Board',
+    'Clubhouse & Amenities Management',
+  ],
+};
+
+const SECURITY_STAFF_ROLE_CONFIG: RoleConfig = {
+  id: 'SECURITY_STAFF',
+  label: 'Security Staff',
+  title: 'Society Security Control Portal',
+  description: 'Gate monitoring, guard shift oversight, visitor & ANPR surveillance, and SOS response.',
+  badgeColor: 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30',
+  defaultPath: '/security-staff',
+  iconName: 'ShieldCheck',
+  capabilities: [
+    'Multi-Gate Monitoring & Gate Activity',
+    'Guard Roster & Shift Oversight',
+    'Vehicle & AI ANPR Scan History',
+    'Emergency SOS & Security Reports',
+  ],
+};
+
+const SERVICE_PARTNER_ROLE_CONFIG: RoleConfig = {
+  id: 'SERVICE_PARTNER',
+  label: 'Service Partner',
+  title: 'Service Partner PWA',
+  description: 'Work order dispatch, technician gate passes, bookings & service verification.',
+  badgeColor: 'bg-amber-500/15 text-amber-500 border-amber-500/30',
+  defaultPath: '/partner',
+  iconName: 'Wrench',
+  capabilities: [
+    'Technician Duty Passes',
+    'Assigned Society Maintenance Tasks',
+    'QR Code Gate Entry Passes',
+    'Completion Work Order Sign-off',
+  ],
+};
+
 export const USER_ROLES: Record<UserRole, RoleConfig> = {
   SUPER_ADMIN: {
     id: 'SUPER_ADMIN',
@@ -71,40 +139,16 @@ export const USER_ROLES: Record<UserRole, RoleConfig> = {
     ],
   },
   PLATFORM_STAFF: PLATFORM_STAFF_ROLE_CONFIG,
-  PLATFORM_ADMIN_STAFF: {
-    ...PLATFORM_STAFF_ROLE_CONFIG,
-    id: 'PLATFORM_ADMIN_STAFF',
-  },
-  SOCIETY_ADMIN: {
-    id: 'SOCIETY_ADMIN',
-    label: 'Society Admin',
-    title: 'Society Operations Center',
-    description: 'Resident management, staff roster, visitor policies, facility bookings & accounts.',
-    badgeColor: 'bg-blue-500/15 text-blue-500 border-blue-500/30',
-    defaultPath: '/society',
-    iconName: 'Building2',
-    capabilities: [
-      'Flats & Resident Onboarding',
-      'Security Guards & Roster Allocation',
-      'Society Maintenance & Notice Board',
-      'Clubhouse & Amenities Management',
-    ],
-  },
-  SECURITY_STAFF: {
-    id: 'SECURITY_STAFF',
-    label: 'Security Staff',
-    title: 'Society Security Control Portal',
-    description: 'Gate monitoring, guard shift oversight, visitor & ANPR surveillance, and SOS response.',
-    badgeColor: 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30',
-    defaultPath: '/security-staff',
-    iconName: 'ShieldCheck',
-    capabilities: [
-      'Multi-Gate Monitoring & Gate Activity',
-      'Guard Roster & Shift Oversight',
-      'Vehicle & AI ANPR Scan History',
-      'Emergency SOS & Security Reports',
-    ],
-  },
+  PLATFORM_ADMIN_STAFF: { ...PLATFORM_STAFF_ROLE_CONFIG, id: 'PLATFORM_ADMIN_STAFF' },
+  PLATFORM_ADMIN: { ...PLATFORM_STAFF_ROLE_CONFIG, id: 'PLATFORM_ADMIN', label: 'Platform Admin' },
+  PLATFORM_SUPPORT: { ...PLATFORM_STAFF_ROLE_CONFIG, id: 'PLATFORM_SUPPORT', label: 'Platform Support' },
+  PLATFORM_FINANCE: { ...PLATFORM_STAFF_ROLE_CONFIG, id: 'PLATFORM_FINANCE', label: 'Platform Finance' },
+  PLATFORM_OPERATIONS: { ...PLATFORM_STAFF_ROLE_CONFIG, id: 'PLATFORM_OPERATIONS', label: 'Platform Operations' },
+  PLATFORM_READ_ONLY: { ...PLATFORM_STAFF_ROLE_CONFIG, id: 'PLATFORM_READ_ONLY', label: 'Platform Read-Only' },
+  SOCIETY_ADMIN: SOCIETY_ADMIN_ROLE_CONFIG,
+  COMPANY_ADMIN: { ...SOCIETY_ADMIN_ROLE_CONFIG, id: 'COMPANY_ADMIN', label: 'Company Admin' },
+  SECURITY_STAFF: SECURITY_STAFF_ROLE_CONFIG,
+  SECURITY_SUPERVISOR: { ...SECURITY_STAFF_ROLE_CONFIG, id: 'SECURITY_SUPERVISOR', label: 'Security Supervisor' },
   SOCIETY_STAFF: {
     id: 'SOCIETY_STAFF',
     label: 'Society Staff',
@@ -155,21 +199,8 @@ export const USER_ROLES: Record<UserRole, RoleConfig> = {
       'Amenity Booking & Maintenance Pay',
     ],
   },
-  SERVICE_PARTNER: {
-    id: 'SERVICE_PARTNER',
-    label: 'Service Partner',
-    title: 'Service Partner PWA',
-    description: 'Work order dispatch, technician gate passes, bookings & service verification.',
-    badgeColor: 'bg-amber-500/15 text-amber-500 border-amber-500/30',
-    defaultPath: '/partner',
-    iconName: 'Wrench',
-    capabilities: [
-      'Technician Duty Passes',
-      'Assigned Society Maintenance Tasks',
-      'QR Code Gate Entry Passes',
-      'Completion Work Order Sign-off',
-    ],
-  },
+  SERVICE_PARTNER: SERVICE_PARTNER_ROLE_CONFIG,
+  TECHNICIAN: { ...SERVICE_PARTNER_ROLE_CONFIG, id: 'TECHNICIAN', label: 'Technician' },
 };
 
 export function getRoleDefaultRoute(role?: UserRole | string | null): string {

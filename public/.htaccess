@@ -1,41 +1,66 @@
-Options -Indexes
+Options -MultiViews -Indexes
 DirectoryIndex index.html
+
+# ==============================================================================
+# 1. PROTECT SENSITIVE CONFIGURATION & REPOSITORY FILES
+# ==============================================================================
+<FilesMatch "(^\.env|\.git|package(-lock)?\.json|composer\.(json|lock)|firebase\.json|firestore\.rules|storage\.rules|\.md$|\.yml$|\.yaml$)">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+  </IfModule>
+</FilesMatch>
 
 <IfModule mod_mime.c>
   AddType application/manifest+json .webmanifest
-  AddType application/javascript .js
+  AddType application/javascript .js .mjs
 </IfModule>
 
+# ==============================================================================
+# 2. HTTPS ENFORCEMENT & REACT SPA ROUTING (NO ASSET REWRITES, NO LOOPS)
+# ==============================================================================
 <IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteBase /
 
-  # Enforce HTTPS when running on live Hostinger production domain
+  # Enforce HTTPS on live production domains (skip localhost / reverse-proxy HTTPS)
   RewriteCond %{HTTPS} !=on
   RewriteCond %{HTTP:X-Forwarded-Proto} !https
   RewriteCond %{HTTP_HOST} !^localhost [NC]
   RewriteCond %{HTTP_HOST} !^127\.0\.0\.1 [NC]
   RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
+  # Allow Let's Encrypt / SSL validation paths to pass through untouched
+  RewriteRule ^\.well-known/ - [L]
+
   # Allow scoped PWA static directories (/guard/, /supporter/, /partner/) root entry
   # to boot the SPA directly instead of returning Apache 403 directory listing denied
   RewriteRule ^(guard|supporter|partner)/?$ /index.html [L]
 
-  # Never rewrite direct index.html or API endpoints
+  # Never rewrite direct index.html or backend API endpoints
   RewriteRule ^index\.html$ - [L]
   RewriteRule ^api/ - [L]
 
-  # Serve existing static files (manifests, sw.js, offline.html, icons, JS/CSS bundles)
+  # Serve existing static files, directories, and symlinks directly
   RewriteCond %{REQUEST_FILENAME} -f [OR]
   RewriteCond %{REQUEST_FILENAME} -d [OR]
   RewriteCond %{REQUEST_FILENAME} -l
   RewriteRule ^ - [L]
 
+  # CRITICAL: Never rewrite missing static assets to index.html (return real 404)
+  # Prevents MIME-type errors when an outdated JS/CSS chunk or image is requested
+  RewriteRule \.(js|mjs|css|map|png|jpe?g|gif|webp|svg|ico|woff2?|ttf|eot|webmanifest|json|txt|xml|pdf)$ - [R=404,L]
+
   # Single Page Application Fallback for all React Router paths
-  RewriteRule . /index.html [L]
+  RewriteRule ^ /index.html [L]
 </IfModule>
 
-# Security and Cache-Control Headers for Hostinger
+# ==============================================================================
+# 3. SECURITY & CACHE-CONTROL HEADERS FOR HOSTINGER APACHE
+# ==============================================================================
 <IfModule mod_headers.c>
   Header always set X-Content-Type-Options "nosniff"
   Header always set X-Frame-Options "SAMEORIGIN"
@@ -43,11 +68,11 @@ DirectoryIndex index.html
   Header always set Permissions-Policy "camera=(self), microphone=(), geolocation=(self)"
 
   # Long-lived immutable caching for hashed Vite build assets & images
-  <FilesMatch "\.(ico|jpe?g|png|gif|webp|css|js|svg|woff2?|ttf|eot)$">
+  <FilesMatch "\.(ico|jpe?g|png|gif|webp|css|js|mjs|svg|woff2?|ttf|eot)$">
     Header set Cache-Control "public, max-age=31536000, immutable"
   </FilesMatch>
 
-  # Never cache Service Workers, Web App Manifests, Offline Fallbacks, or index.html
+  # Never cache HTML entry points, Service Workers, Web App Manifests, or Offline Fallbacks
   <FilesMatch "^(index\.html|offline\.html|sw\.js|registerSW\.js|manifest\.webmanifest)$">
     Header set Cache-Control "max-age=0, no-cache, no-store, must-revalidate"
     Header set Pragma "no-cache"

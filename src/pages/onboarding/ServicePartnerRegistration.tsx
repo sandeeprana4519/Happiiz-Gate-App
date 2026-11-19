@@ -48,7 +48,7 @@ export const ServicePartnerRegistration: React.FC = () => {
   const [businessName, setBusinessName] = useState('');
   const [phone, setPhone] = useState(user?.phoneNumber || '');
   const [email, setEmail] = useState(user?.email || '');
-  const [password, setPassword] = useState('Partner@2026');
+  const [password, setPassword] = useState('');
   const [address, setAddress] = useState('');
 
   // Section 2: Service Area & Mapping
@@ -179,7 +179,7 @@ export const ServicePartnerRegistration: React.FC = () => {
         contactNumber: phone.trim(),
         phone: phone.trim(),
         email: email.trim().toLowerCase(),
-        password: password || 'Partner@2026',
+        password: password.trim(),
         businessAddress: address.trim() || currentSociety?.address || 'Community Hub',
         address: address.trim(),
         serviceCategories: selectedDomains,

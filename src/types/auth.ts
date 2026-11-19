@@ -5,16 +5,24 @@
 
 export type UserRole =
   | 'SUPER_ADMIN'
+  | 'PLATFORM_ADMIN'
+  | 'PLATFORM_SUPPORT'
+  | 'PLATFORM_FINANCE'
+  | 'PLATFORM_OPERATIONS'
+  | 'PLATFORM_READ_ONLY'
   | 'PLATFORM_STAFF'
   | 'PLATFORM_ADMIN_STAFF'
   | 'SOCIETY_ADMIN'
+  | 'COMPANY_ADMIN'
   | 'SOCIETY_STAFF'
+  | 'SECURITY_SUPERVISOR'
   | 'SECURITY_STAFF'
   | 'SECURITY_GUARD'
   | 'GATE_GUARD'
   | 'DIGITAL_SUPPORTER'
   | 'RESIDENT'
-  | 'SERVICE_PARTNER';
+  | 'SERVICE_PARTNER'
+  | 'TECHNICIAN';
 
 export type AccountStatus =
   | 'PENDING'
@@ -53,9 +61,13 @@ export interface UserProfile {
   primaryRole?: UserRole;
   role?: UserRole; // Compatibility alias
   isSuperAdmin?: boolean;
+  customClaimsRole?: string;
+  permissions?: string[];
   societyName?: string; // Compatibility alias
   societyId?: string; // Compatibility alias
+  companyId?: string;
   societyCode?: string;
+  gateAssigned?: string;
   flatNumber?: string; // Compatibility alias
   block?: string; // Compatibility alias
   buildingName?: string; // Compatibility alias

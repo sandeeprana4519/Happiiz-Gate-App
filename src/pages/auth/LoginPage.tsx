@@ -39,7 +39,6 @@ import {
   Sparkles,
   Phone,
   ShieldCheck,
-  Building2,
   Wrench,
 } from 'lucide-react';
 
@@ -55,26 +54,7 @@ export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const queryParams = new URLSearchParams(location.search);
-  const targetRole = queryParams.get('role');
   const returnToPath = queryParams.get('returnTo');
-
-  // Portal Criteria Selector ('ALL' = Unified Auto-Role, 'SOCIETY_STAFF', 'PLATFORM_STAFF')
-  const [portalMode, setPortalMode] = useState<'ALL' | 'SOCIETY_STAFF' | 'PLATFORM_STAFF'>(
-    targetRole === 'SOCIETY_STAFF'
-      ? 'SOCIETY_STAFF'
-      : targetRole === 'PLATFORM_STAFF' || targetRole === 'PLATFORM_ADMIN_STAFF'
-      ? 'PLATFORM_STAFF'
-      : 'ALL'
-  );
-
-  useEffect(() => {
-    if (targetRole === 'SOCIETY_STAFF') setPortalMode('SOCIETY_STAFF');
-    else if (targetRole === 'PLATFORM_STAFF' || targetRole === 'PLATFORM_ADMIN_STAFF') {
-      setPortalMode('PLATFORM_STAFF');
-    } else {
-      setPortalMode('ALL');
-    }
-  }, [targetRole]);
 
   // Multi-step View State
   const [view, setView] = useState<AuthView>('LOGIN');
@@ -174,6 +154,17 @@ export const LoginPage: React.FC = () => {
     }
 
     const defaultRoute = getRoleDefaultRoute(role);
+    const isGlobalRole =
+      role === 'SUPER_ADMIN' || role === 'PLATFORM_STAFF' || role === 'DIGITAL_SUPPORTER';
+    if (
+      !isGlobalRole &&
+      Array.isArray(profile.assignedSocieties) &&
+      profile.assignedSocieties.length > 1
+    ) {
+      navigate('/select-society', { replace: true });
+      return;
+    }
+
     // Honor returnTo only if it matches an authorized route prefix; otherwise always send to role's own portal
     const targetRoute =
       returnToPath && returnToPath.startsWith(defaultRoute) ? returnToPath : defaultRoute;
@@ -181,7 +172,8 @@ export const LoginPage: React.FC = () => {
   };
 
   /**
-   * EMAIL / USERNAME / LOGIN ID + PASSWORD LOGIN SUBMIT
+   * UNIVERSAL LOGIN SUBMIT (Login ID / Email / Mobile Number + Password)
+   * Automatically authenticates via Firebase Auth and routes to the user's verified role dashboard.
    */
   const handleEmailPasswordLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -189,7 +181,7 @@ export const LoginPage: React.FC = () => {
     setSuccessNotice(null);
 
     if (!email.trim()) {
-      setError('Please enter your registered Email Address, Username, or Login ID.');
+      setError('Please enter your registered Login ID, Email Address, or Mobile Number.');
       return;
     }
     if (!password) {
@@ -202,20 +194,7 @@ export const LoginPage: React.FC = () => {
       const { user, role } = await signInWithEmail(email, password);
       const canonicalRole = normalizeUserRole(role);
 
-      if (portalMode === 'SOCIETY_STAFF' && canonicalRole !== 'SOCIETY_STAFF') {
-        setError(
-          'Portal Mismatch: This account is not a Society Staff account. Switch to "Unified Login" above to open your portal.'
-        );
-        return;
-      }
-      if (portalMode === 'PLATFORM_STAFF' && canonicalRole !== 'PLATFORM_STAFF') {
-        setError(
-          'Portal Mismatch: This account is not an Admin Platform Staff account. Switch to "Unified Login" above to open your portal.'
-        );
-        return;
-      }
-
-      setSuccessNotice('Authentication successful. Redirecting to your portal...');
+      setSuccessNotice('Authentication verified. Opening your workspace...');
       await handleRedirectByRole(user, canonicalRole);
     } catch (err: any) {
       setError(err?.message || 'Authentication failed. Please verify your credentials.');
@@ -425,15 +404,14 @@ export const LoginPage: React.FC = () => {
   };
 
   /**
-   * Quick fill test credentials helper for evaluators
+   * Quick fill test credentials helper for local development sandbox only
    */
   const handleFillCredentials = (testEmail: string) => {
     if (!import.meta.env.DEV || !isDevMode) return;
-    setPortalMode('ALL');
     setEmail(testEmail);
     setPassword(DEV_SANDBOX_PASSWORD);
     setError(null);
-    setSuccessNotice(`Credentials loaded for ${testEmail}. Click Login to continue.`);
+    setSuccessNotice(`Sandbox credentials loaded for ${testEmail}. Tap Sign In to continue.`);
   };
 
   const currentCountry =
@@ -454,96 +432,8 @@ export const LoginPage: React.FC = () => {
         </p>
       </div>
 
-      {/* Main Authentication Card */}
-      <div className="w-full rounded-2xl bg-[#FFFFFF] border border-[#E6F1F5] shadow-[0_4px_24px_rgba(0,0,0,0.06)] p-6 sm:p-8">
-        {/* Portal-Specific Target Role Header */}
-        {(targetRole === 'SOCIETY_ADMIN' || portalMode === 'ALL') && targetRole === 'SOCIETY_ADMIN' && view === 'LOGIN' && (
-          <div className="mb-4 p-3 rounded-xl bg-purple-50 border border-purple-200 text-xs text-[#673AB7] font-semibold flex items-center gap-2">
-            <Building2 className="w-4 h-4 text-[#673AB7] shrink-0" />
-            <span>Society Admin Portal Authentication</span>
-          </div>
-        )}
-        {targetRole === 'SUPER_ADMIN' && view === 'LOGIN' && (
-          <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 font-semibold flex items-center gap-2">
-            <ShieldAlert className="w-4 h-4 text-red-600 shrink-0" />
-            <span>Platform Super Admin Master Control Authorization</span>
-          </div>
-        )}
-
-        {/* Dedicated Staff Login Criteria Selector */}
-        {view === 'LOGIN' && targetRole !== 'SUPER_ADMIN' && (
-          <div className="mb-4 space-y-2.5">
-            <div className="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-[#F1F9FC] border border-[#E6F1F5]">
-              <button
-                type="button"
-                onClick={() => {
-                  setPortalMode('ALL');
-                  setError(null);
-                }}
-                className={`px-2 py-1.5 rounded-lg text-[11px] font-bold transition cursor-pointer ${
-                  portalMode === 'ALL'
-                    ? 'bg-white text-[#111111] shadow-xs border border-[#E6F1F5]'
-                    : 'text-[#64748B] hover:text-[#111111]'
-                }`}
-              >
-                Unified Login
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setPortalMode('SOCIETY_STAFF');
-                  setError(null);
-                }}
-                className={`px-2 py-1.5 rounded-lg text-[11px] font-bold transition cursor-pointer ${
-                  portalMode === 'SOCIETY_STAFF'
-                    ? 'bg-teal-600 text-white shadow-xs'
-                    : 'text-[#64748B] hover:text-teal-700'
-                }`}
-              >
-                Society Staff
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setPortalMode('PLATFORM_STAFF');
-                  setError(null);
-                }}
-                className={`px-2 py-1.5 rounded-lg text-[11px] font-bold transition cursor-pointer ${
-                  portalMode === 'PLATFORM_STAFF'
-                    ? 'bg-[#673AB7] text-white shadow-xs'
-                    : 'text-[#64748B] hover:text-[#673AB7]'
-                }`}
-              >
-                Admin Platform Staff
-              </button>
-            </div>
-
-            {portalMode === 'SOCIETY_STAFF' && (
-              <div className="p-3 rounded-xl bg-teal-50 border border-teal-200 text-xs text-teal-900 font-medium flex items-start gap-2">
-                <ShieldCheck className="w-4 h-4 text-teal-700 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-extrabold block">Society Staff Portal Login</span>
-                  <span className="text-[11px] text-teal-700">
-                    Sign in with the Email ID & Password issued by your Society Admin. Only your assigned society and authorized modules will open.
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {portalMode === 'PLATFORM_STAFF' && (
-              <div className="p-3 rounded-xl bg-purple-50 border border-purple-200 text-xs text-purple-900 font-medium flex items-start gap-2">
-                <ShieldCheck className="w-4 h-4 text-[#673AB7] shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-extrabold block">Admin Platform Staff Portal Login</span>
-                  <span className="text-[11px] text-[#673AB7]">
-                    Sign in with Super Admin issued credentials to open your department workspace.
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
+      {/* Main Universal Authentication Card (Premium Purple + Clean White) */}
+      <div className="w-full rounded-2xl bg-[#FFFFFF] border border-[#673AB7]/15 shadow-[0_12px_40px_rgba(103,58,183,0.10)] p-6 sm:p-8">
         {/* Session Expiration Notice */}
         {sessionWarning && !error && (
           <div className="mb-5 p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 font-medium flex items-start gap-2">
@@ -571,38 +461,38 @@ export const LoginPage: React.FC = () => {
         )}
 
         {/* ============================================================ */}
-        {/* VIEW 1: UNIFIED LOGIN SCREEN (EMAIL / USERNAME / LOGIN ID)   */}
+        {/* VIEW 1: ONE UNIVERSAL LOGIN SCREEN FOR ALL HAPPIIZ ROLES     */}
         {/* ============================================================ */}
         {view === 'LOGIN' && (
           <div className="space-y-6">
             <div className="space-y-1">
-              <h2 className="text-xl font-bold tracking-tight text-[#111111]">
-                Login to Happiiz Gate
+              <h2 className="text-xl font-extrabold tracking-tight text-[#111111]">
+                Sign In to Happiiz Gate
               </h2>
               <p className="text-xs text-[#64748B]">
-                Enter your Email Address, Username, or Login ID and password to access your portal.
+                One secure login for all roles. You will be automatically directed to your authorized dashboard.
               </p>
             </div>
 
             <form onSubmit={handleEmailPasswordLogin} className="space-y-4">
-              {/* Email / Username / Login ID Input */}
+              {/* Login ID / Email / Mobile Number Input */}
               <div>
                 <label className="block text-xs font-bold tracking-wide text-[#111111] mb-1.5">
-                  Email Address / Username / Login ID
+                  Login ID / Email / Mobile Number
                 </label>
                 <Input
                   type="text"
                   autoComplete="username"
-                  placeholder="name@happiizgate.com or EMP-SEC-01"
+                  placeholder="Email, Login ID, or Mobile Number"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  leftIcon={<Mail className="w-4 h-4 text-[#64748B]" />}
+                  leftIcon={<Mail className="w-4 h-4 text-[#673AB7]" />}
                   required
                   autoFocus
                 />
               </div>
 
-              {/* Password Input with Show/Hide Toggle */}
+              {/* Password Input with Show/Hide Eye Toggle */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="block text-xs font-bold tracking-wide text-[#111111]">
@@ -623,16 +513,17 @@ export const LoginPage: React.FC = () => {
                 <div className="relative">
                   <Input
                     type={showPassword ? 'text' : 'password'}
+                    autoComplete="current-password"
                     placeholder="Enter your password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    leftIcon={<Lock className="w-4 h-4 text-[#64748B]" />}
+                    leftIcon={<Lock className="w-4 h-4 text-[#673AB7]" />}
                     required
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#111111] p-1 cursor-pointer"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#673AB7] p-1 cursor-pointer"
                     aria-label={showPassword ? 'Hide password' : 'Show password'}
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -640,29 +531,29 @@ export const LoginPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Remember Me Checkbox */}
+              {/* Remember Me Checkbox (Identifier Only) */}
               <div className="flex items-center justify-between pt-1">
                 <label className="flex items-center gap-2 cursor-pointer select-none">
                   <input
                     type="checkbox"
                     checked={rememberMe}
                     onChange={(e) => setRememberMe(e.target.checked)}
-                    className="w-4 h-4 rounded border-[#E6F1F5] text-[#673AB7] focus:ring-[#673AB7] cursor-pointer"
+                    className="w-4 h-4 rounded border-[#673AB7]/30 text-[#673AB7] focus:ring-[#673AB7] cursor-pointer"
                   />
                   <span className="text-xs text-[#64748B] font-medium">Remember Me</span>
                 </label>
               </div>
 
-              {/* Purple Primary Login Button */}
+              {/* Purple Primary Sign In Button */}
               <Button
                 type="submit"
                 variant="primary"
                 size="lg"
-                className="w-full mt-2"
+                className="w-full mt-2 bg-[#673AB7] hover:bg-[#5E35B1] text-white shadow-md shadow-[#673AB7]/25"
                 loading={loading}
                 rightIcon={<ArrowRight className="w-4 h-4" />}
               >
-                Login
+                Sign In
               </Button>
             </form>
 

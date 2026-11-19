@@ -1,0 +1,148 @@
+name: Build & Safe Deploy to Hostinger
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: hostinger-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  build_verify_and_deploy:
+    name: Build, Verify & Deploy dist/ to Hostinger public_html
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies (respecting .npmrc)
+        run: npm ci
+
+      - name: TypeScript type check
+        run: npm run lint
+
+      - name: Build production bundle
+        env:
+          VITE_APP_ENV: production
+          VITE_ENABLE_DEV_MOCK_AUTH: 'false'
+          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
+          VITE_FIREBASE_MEASUREMENT_ID: ${{ secrets.VITE_FIREBASE_MEASUREMENT_ID }}
+          VITE_PUBLIC_APP_URL: ${{ secrets.VITE_PUBLIC_APP_URL }}
+        run: npm run build
+
+      - name: Ensure canonical .htaccess exists in dist/
+        run: |
+          if [ ! -f dist/.htaccess ]; then
+            echo "Copying public/.htaccess into dist/.htaccess..."
+            cp public/.htaccess dist/.htaccess
+          fi
+          test -s dist/.htaccess
+
+      - name: Verify production build integrity & secret hygiene
+        run: node scripts/verify-build.mjs
+
+      - name: Validate Hostinger SSH deployment secrets
+        id: check_secrets
+        env:
+          HOSTINGER_SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          HOSTINGER_SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+          HOSTINGER_SSH_KEY: ${{ secrets.HOSTINGER_SSH_KEY }}
+          HOSTINGER_DEPLOY_PATH: ${{ secrets.HOSTINGER_DEPLOY_PATH }}
+        run: |
+          if [ -z "$HOSTINGER_SSH_HOST" ] || [ -z "$HOSTINGER_SSH_USER" ] || [ -z "$HOSTINGER_SSH_KEY" ] || [ -z "$HOSTINGER_DEPLOY_PATH" ]; then
+            echo "::error::Missing required Hostinger SSH secrets (HOSTINGER_SSH_HOST, HOSTINGER_SSH_USER, HOSTINGER_SSH_KEY, HOSTINGER_DEPLOY_PATH)."
+            exit 1
+          fi
+          case "$HOSTINGER_DEPLOY_PATH" in
+            *public_html*) ;;
+            *)
+              echo "::error::HOSTINGER_DEPLOY_PATH must point to a public_html directory to prevent unsafe remote writes."
+              exit 1
+              ;;
+          esac
+
+      - name: Configure SSH client
+        env:
+          HOSTINGER_SSH_KEY: ${{ secrets.HOSTINGER_SSH_KEY }}
+          HOSTINGER_SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          HOSTINGER_SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT || '65002' }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf "%s\n" "$HOSTINGER_SSH_KEY" > ~/.ssh/hostinger_deploy_key
+          chmod 600 ~/.ssh/hostinger_deploy_key
+          ssh-keyscan -p "$HOSTINGER_SSH_PORT" -H "$HOSTINGER_SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Backup existing public_html & safely deploy dist/ via rsync
+        env:
+          HOSTINGER_SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          HOSTINGER_SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT || '65002' }}
+          HOSTINGER_SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+          HOSTINGER_DEPLOY_PATH: ${{ secrets.HOSTINGER_DEPLOY_PATH }}
+          SITE_URL: ${{ secrets.VITE_PUBLIC_APP_URL }}
+        run: |
+          set -euo pipefail
+          SSH_OPTS="-i ~/.ssh/hostinger_deploy_key -p ${HOSTINGER_SSH_PORT} -o StrictHostKeyChecking=accept-new"
+          REMOTE="${HOSTINGER_SSH_USER}@${HOSTINGER_SSH_HOST}"
+          BACKUP_ROOT="$(dirname "${HOSTINGER_DEPLOY_PATH}")/happiiz_backups"
+          TIMESTAMP="$(date -u +%Y%m%d_%H%M%S)"
+          BACKUP_FILE="${BACKUP_ROOT}/public_html_${TIMESTAMP}.tar.gz"
+          STAGING_DIR="$(dirname "${HOSTINGER_DEPLOY_PATH}")/happiiz_staging_${TIMESTAMP}"
+
+          echo "1. Creating pre-deployment backup on Hostinger..."
+          ssh $SSH_OPTS "$REMOTE" "mkdir -p '${BACKUP_ROOT}' '${STAGING_DIR}' && \
+            if [ -d '${HOSTINGER_DEPLOY_PATH}' ] && [ \"\$(ls -A '${HOSTINGER_DEPLOY_PATH}')\" ]; then \
+              tar -czf '${BACKUP_FILE}' --exclude='.well-known' --exclude='cgi-bin' -C '${HOSTINGER_DEPLOY_PATH}' . ; \
+              echo 'Backup saved to ${BACKUP_FILE}'; \
+            else \
+              echo 'Target directory empty; skipping archive.'; \
+            fi && \
+            ls -1t '${BACKUP_ROOT}'/public_html_*.tar.gz 2>/dev/null | tail -n +6 | xargs -r rm -f"
+
+          echo "2. Uploading verified dist/ bundle to remote staging directory..."
+          rsync -az --checksum -e "ssh $SSH_OPTS" dist/ "${REMOTE}:${STAGING_DIR}/"
+
+          echo "3. Validating staged bundle before touching public_html..."
+          ssh $SSH_OPTS "$REMOTE" "test -s '${STAGING_DIR}/index.html' && test -s '${STAGING_DIR}/.htaccess' && test -d '${STAGING_DIR}/assets'"
+
+          echo "4. Syncing staged dist/ into public_html (preserving .well-known, cgi-bin, and unrelated server files)..."
+          # Safe sync: updates app files and cleans only stale hashed assets inside assets/,
+          # NEVER runs rm -rf public_html/* and NEVER deletes .well-known/, cgi-bin/, or backups.
+          ssh $SSH_OPTS "$REMOTE" "rsync -a --exclude='.well-known/' --exclude='cgi-bin/' '${STAGING_DIR}/' '${HOSTINGER_DEPLOY_PATH}/' && \
+            rsync -a --delete '${STAGING_DIR}/assets/' '${HOSTINGER_DEPLOY_PATH}/assets/' && \
+            rm -rf '${STAGING_DIR}'"
+
+          echo "5. Verifying deployed public_html files..."
+          if ! ssh $SSH_OPTS "$REMOTE" "test -s '${HOSTINGER_DEPLOY_PATH}/index.html' && test -s '${HOSTINGER_DEPLOY_PATH}/.htaccess' && ls '${HOSTINGER_DEPLOY_PATH}/assets/'*.js >/dev/null 2>&1"; then
+            echo "::error::Post-deploy file verification failed! Restoring backup ${BACKUP_FILE}..."
+            ssh $SSH_OPTS "$REMOTE" "if [ -f '${BACKUP_FILE}' ]; then tar -xzf '${BACKUP_FILE}' -C '${HOSTINGER_DEPLOY_PATH}'; fi"
+            exit 1
+          fi
+
+          if [ -n "${SITE_URL:-}" ]; then
+            echo "6. Running live HTTP health check against ${SITE_URL}..."
+            if ! node scripts/health-check.mjs "${SITE_URL}"; then
+              echo "::error::Live HTTP health check failed! Rolling back to ${BACKUP_FILE}..."
+              ssh $SSH_OPTS "$REMOTE" "if [ -f '${BACKUP_FILE}' ]; then tar -xzf '${BACKUP_FILE}' -C '${HOSTINGER_DEPLOY_PATH}'; fi"
+              exit 1
+            fi
+          else
+            echo "Note: Set VITE_PUBLIC_APP_URL secret to enable automated post-deploy live HTTPS health checks."
+          fi
+
+          echo "Safe Hostinger deployment completed successfully."

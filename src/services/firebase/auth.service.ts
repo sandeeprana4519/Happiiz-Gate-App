@@ -16,9 +16,9 @@ import {
   type UserCredential,
 } from 'firebase/auth';
 import { auth, db } from './init';
-import { collection, doc, getDoc, query, where, getDocs, limit } from 'firebase/firestore';
+import { collection, doc, getDoc, setDoc, query, where, getDocs, limit } from 'firebase/firestore';
 import { isFirebaseConfigured, firebaseValidation, IS_DEV_MODE } from '../../config/firebase.config';
-import { normalizeUserRole } from '../../config/constants';
+import { normalizeUserRole, isKnownUserRole } from '../../config/constants';
 import { UserProfile, UserRole } from '../../types/auth';
 import { MOCK_USERS } from '../mock/mockData';
 
@@ -130,15 +130,34 @@ export function mapFirebaseAuthError(error: any): string {
   }
 
   switch (code) {
+    case 'auth/user-not-found':
+    case 'auth/wrong-password':
+    case 'auth/invalid-credential':
+    case 'auth/invalid-login-credentials':
+      return 'Invalid Login ID or Password. Please verify your credentials or tap Forgot Password.';
+
+    case 'auth/user-disabled':
+    case 'disabled-account':
+      return 'Account Disabled: Your account has been disabled or suspended. Please contact your administrator.';
+
+    case 'auth/invalid-email':
+      return 'Please enter a valid Email Address, Login ID, or Mobile Number.';
+
+    case 'permission-denied':
+    case 'firestore/permission-denied':
+      return 'Access Verification Failed (permission-denied): Firestore security rules denied reading your account profile. Please ensure Firestore rules are deployed and your UID has an active profile or Custom Claims.';
+
+    case 'missing-role':
+      return 'Account Role Not Configured: Your login succeeded, but no authorized role is assigned to your account yet. Please contact your Super Admin to provision your role.';
+
     case 'auth/configuration-not-found':
       return (
-        'Phone Authentication is not enabled for this Firebase project. ' +
-        'In the Firebase Console (console.firebase.google.com), open Authentication > Sign-in method, ' +
-        'click "Phone", toggle "Enable", and click "Save". If using a new project, ensure Identity Platform is enabled.'
+        'Authentication provider is not enabled for this Firebase project. ' +
+        'In Firebase Console > Authentication > Sign-in method, enable Email/Password (and Phone/Google if required).'
       );
 
     case 'auth/invalid-api-key':
-      return 'Invalid Firebase API Key. Please verify VITE_FIREBASE_API_KEY in your environment configuration.';
+      return 'Invalid Firebase API Key. Please verify VITE_FIREBASE_API_KEY in your production build environment.';
 
     case 'auth/unauthorized-domain':
       return (
@@ -150,7 +169,7 @@ export function mapFirebaseAuthError(error: any): string {
       return 'Invalid mobile phone number format. Please ensure the number follows international E.164 format (e.g. +91 98765 43210).';
 
     case 'auth/too-many-requests':
-      return 'Too many OTP attempts or SMS quota exceeded. Please wait a few minutes before trying again.';
+      return 'Too many login attempts. Please wait a few minutes before trying again or reset your password.';
 
     case 'auth/quota-exceeded':
       return (
@@ -177,7 +196,7 @@ export function mapFirebaseAuthError(error: any): string {
       return 'Please enter all 6 digits of the verification code.';
 
     case 'auth/network-request-failed':
-      return 'Network error. Please check your internet connectivity.';
+      return 'Network error. Please check your internet connectivity and try again.';
 
     case 'auth/popup-blocked':
       return 'Google Sign-In popup was blocked by your browser. Please allow popups for this site and retry.';
@@ -189,11 +208,14 @@ export function mapFirebaseAuthError(error: any): string {
       return 'Another sign-in popup is already open. Please complete or close it.';
 
     default:
-      if (error?.message?.includes('configuration-not-found')) {
+      if (message.includes('configuration-not-found')) {
         return (
-          'Phone Authentication is not enabled in Firebase Console. ' +
-          'Navigate to Authentication > Sign-in method, click "Phone", toggle "Enable", and click "Save".'
+          'Authentication is not enabled in Firebase Console. ' +
+          'Navigate to Authentication > Sign-in method and enable Email/Password.'
         );
+      }
+      if (message.includes('permission-denied') || message.includes('insufficient permissions')) {
+        return 'Access Verification Failed (permission-denied): Firestore security rules denied reading your account profile.';
       }
       return error?.message || 'Authentication error occurred. Please try again.';
   }
@@ -589,11 +611,13 @@ export async function findRegisteredUserByEmail(emailOrId: string): Promise<User
   if (db && isFirebaseConfigured) {
     try {
       const usersRef = collection(db, 'users');
-      const field = targetLower.includes('@') ? 'email' : 'username';
-      const q = query(usersRef, where(field, '==', targetLower), limit(1));
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        return snap.docs[0].data() as UserProfile;
+      const fields = targetLower.includes('@') ? ['email'] : ['loginId', 'username'];
+      for (const field of fields) {
+        const q = query(usersRef, where(field, '==', field === 'loginId' ? targetRaw : targetLower), limit(1));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          return { uid: snap.docs[0].id, ...snap.docs[0].data() } as UserProfile;
+        }
       }
     } catch (e) {
       console.warn('[AuthService] Firestore user lookup note:', e);
@@ -603,8 +627,22 @@ export async function findRegisteredUserByEmail(emailOrId: string): Promise<User
   return null;
 }
 
+function isLikelyPhoneNumber(input: string): boolean {
+  const cleaned = input.trim();
+  if (cleaned.includes('@')) return false;
+  if (!/^\+?[\d\s\-()]{8,18}$/.test(cleaned)) return false;
+  const digits = extractDigits(cleaned);
+  return digits.length >= 10 && digits.length <= 15;
+}
+
 export async function findRegisteredUserByIdentifier(identifier: string): Promise<UserProfile | null> {
-  return findRegisteredUserByEmail(identifier);
+  const trimmed = String(identifier || '').trim();
+  if (!trimmed) return null;
+  if (isLikelyPhoneNumber(trimmed)) {
+    const byMobile = await findRegisteredUserByMobile(trimmed);
+    if (byMobile) return byMobile;
+  }
+  return findRegisteredUserByEmail(trimmed);
 }
 
 /**
@@ -654,14 +692,24 @@ export async function findRegisteredUserByMobile(phoneNumber: string): Promise<U
     }
   }
 
-  // 3. Check Firestore `users` collection if db is available
+  // 3. Check Firestore `users` collection if db is available (supports raw, +91, and 10-digit variants)
   if (db && isFirebaseConfigured) {
     try {
       const usersRef = collection(db, 'users');
-      const q = query(usersRef, where('phoneNumber', '==', phoneNumber), limit(1));
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        return snap.docs[0].data() as UserProfile;
+      const candidates = Array.from(
+        new Set([
+          phoneNumber.trim(),
+          inputDigits,
+          inputDigits.length === 10 ? `+91${inputDigits}` : `+${inputDigits}`,
+          inputDigits.length === 10 ? `+91 ${inputDigits.slice(0, 5)} ${inputDigits.slice(5)}` : phoneNumber.trim(),
+        ])
+      );
+      for (const candidate of candidates) {
+        const q = query(usersRef, where('phoneNumber', '==', candidate), limit(1));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          return { uid: snap.docs[0].id, ...snap.docs[0].data() } as UserProfile;
+        }
       }
     } catch (e) {
       console.warn('[AuthService] Firestore phone lookup note:', e);
@@ -804,8 +852,48 @@ export function assertAccountCanAuthenticate(user: UserProfile, emailHint?: stri
 }
 
 /**
- * UNIFIED LOGIN (Email / Username / Login ID + Password)
- * Production mode enforces Firebase Authentication + server-verified Firestore user profile.
+ * Authoritative role resolution combining Firebase Auth Custom Claims and Firestore /users/{uid}.
+ * NEVER grants privileges based on email address alone or frontend-supplied role parameters.
+ */
+export function resolveVerifiedRoleFromClaimsAndProfile(
+  claims: Record<string, any> | null | undefined,
+  profile: UserProfile | null | undefined
+): { role: UserRole | null; isSuperAdmin: boolean; rawClaimRole?: string } {
+  const claimRoleRaw = typeof claims?.role === 'string' ? claims.role.trim().toUpperCase() : '';
+  const claimIsSuperAdmin = claims?.isSuperAdmin === true || claimRoleRaw === 'SUPER_ADMIN';
+
+  if (claimIsSuperAdmin) {
+    return { role: 'SUPER_ADMIN', isSuperAdmin: true, rawClaimRole: 'SUPER_ADMIN' };
+  }
+
+  if (claimRoleRaw && isKnownUserRole(claimRoleRaw)) {
+    return {
+      role: normalizeUserRole(claimRoleRaw),
+      isSuperAdmin: false,
+      rawClaimRole: claimRoleRaw,
+    };
+  }
+
+  if (profile) {
+    if (profile.isSuperAdmin === true) {
+      return { role: 'SUPER_ADMIN', isSuperAdmin: true };
+    }
+    const rawProfileRole = profile.primaryRole || profile.role;
+    if (rawProfileRole && isKnownUserRole(rawProfileRole)) {
+      const normalized = normalizeUserRole(rawProfileRole);
+      return {
+        role: normalized,
+        isSuperAdmin: normalized === 'SUPER_ADMIN',
+      };
+    }
+  }
+
+  return { role: null, isSuperAdmin: false };
+}
+
+/**
+ * UNIFIED LOGIN (Login ID / Email / Mobile Number + Password)
+ * Production mode strictly enforces Firebase Authentication + Custom Claims / Firestore UID verification.
  */
 export async function signInWithEmail(
   identifierInput: string,
@@ -815,10 +903,10 @@ export async function signInWithEmail(
   const lowerInput = trimmedInput.toLowerCase();
 
   if (!lowerInput) {
-    throw new Error('Login ID Required: Please enter your registered Email, Username, or Login ID.');
+    throw new Error('Login ID Required: Please enter your registered Email, Login ID, or Mobile Number.');
   }
   if (!password) {
-    throw new Error('Incorrect Password: Password cannot be blank.');
+    throw new Error('Password Required: Password cannot be blank.');
   }
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -826,19 +914,19 @@ export async function signInWithEmail(
 
   checkLoginRateLimit(lowerInput);
 
-  // PRODUCTION FIREBASE PATH (Zero client-side password backdoors)
+  // PRODUCTION FIREBASE PATH (Zero client-side password backdoors, zero email-only role escalation)
   if (isFirebaseConfigured && auth && !IS_DEV_MODE) {
     let loginEmail = isEmailInput ? lowerInput : '';
 
-    // Resolve username / login ID to email if non-email entered
+    // Resolve mobile number / username / login ID to registered email
     if (!loginEmail) {
-      const lookup = await findRegisteredUserByIdentifier(lowerInput);
+      const lookup = await findRegisteredUserByIdentifier(trimmedInput);
       if (lookup?.email) {
         loginEmail = lookup.email.toLowerCase();
       } else {
         recordFailedLoginAttempt(lowerInput);
         throw new Error(
-          'Account Not Found: Enter your registered Email Address or contact your administrator for your Login ID.'
+          'Invalid Login ID or Password. If signing in with a Login ID or Mobile Number, please try your registered Email Address or contact your administrator.'
         );
       }
     }
@@ -848,31 +936,98 @@ export async function signInWithEmail(
       credential = await signInWithEmailAndPassword(auth, loginEmail, password);
     } catch (fbErr: any) {
       recordFailedLoginAttempt(lowerInput);
-      const code = fbErr?.code || '';
-      if (
-        code === 'auth/wrong-password' ||
-        code === 'auth/invalid-credential' ||
-        code === 'auth/user-not-found'
-      ) {
-        throw new Error('Invalid Login ID or Password. Please verify your credentials or click Forgot Password.');
-      }
       throw new Error(mapFirebaseAuthError(fbErr));
     }
 
-    if (!db) {
-      await signOutFirebase();
-      throw new Error('Database service unavailable. Please contact system support.');
+    // 1. Read verified Firebase ID Token Custom Claims (force refresh to pick up latest server claims)
+    let claims: Record<string, any> = {};
+    try {
+      const tokenResult = await credential.user.getIdTokenResult(true);
+      claims = tokenResult.claims || {};
+    } catch (tokenErr) {
+      console.warn('[AuthService] Could not refresh ID token claims:', tokenErr);
     }
 
-    const userSnap = await getDoc(doc(db, 'users', credential.user.uid));
-    if (!userSnap.exists()) {
+    // 2. Read authoritative Firestore /users/{uid} record
+    let firestoreProfile: UserProfile | null = null;
+    if (db) {
+      try {
+        const userSnap = await getDoc(doc(db, 'users', credential.user.uid));
+        if (userSnap.exists()) {
+          firestoreProfile = { uid: credential.user.uid, ...userSnap.data() } as UserProfile;
+        }
+      } catch (fsErr: any) {
+        // If Custom Claims already verify SUPER_ADMIN, do not lock out due to missing/unreadable doc
+        const claimCheck = resolveVerifiedRoleFromClaimsAndProfile(claims, null);
+        if (!claimCheck.isSuperAdmin) {
+          await signOutFirebase();
+          throw new Error(mapFirebaseAuthError(fsErr));
+        }
+      }
+    }
+
+    // 3. Combine Custom Claims + Firestore profile strictly bound to authenticated UID
+    const verified = resolveVerifiedRoleFromClaimsAndProfile(claims, firestoreProfile);
+
+    if (!verified.role) {
       await signOutFirebase();
       throw new Error(
-        'User profile not provisioned in Happiiz Gate. Please contact your Society or Platform Administrator.'
+        mapFirebaseAuthError({ code: 'missing-role' })
       );
     }
 
-    const liveProfile = { uid: credential.user.uid, ...userSnap.data() } as UserProfile;
+    const nowIso = new Date().toISOString();
+    const liveProfile: UserProfile = firestoreProfile
+      ? {
+          ...firestoreProfile,
+          uid: credential.user.uid,
+          email: firestoreProfile.email || credential.user.email || loginEmail,
+          isSuperAdmin: verified.isSuperAdmin || firestoreProfile.isSuperAdmin === true,
+          primaryRole: verified.role,
+          role: verified.role,
+          customClaimsRole: verified.rawClaimRole,
+          societyId: (claims.societyId as string) || firestoreProfile.societyId,
+          companyId: (claims.companyId as string) || firestoreProfile.companyId,
+          gateAssigned: (claims.gateAssigned as string) || firestoreProfile.gateAssigned,
+          onboardingCompleted:
+            verified.isSuperAdmin ? true : firestoreProfile.onboardingCompleted !== false,
+          accountStatus: firestoreProfile.accountStatus || 'ACTIVE',
+          lastLoginAt: nowIso,
+        }
+      : {
+          uid: credential.user.uid,
+          fullName: credential.user.displayName || (verified.isSuperAdmin ? 'Platform Super Admin' : 'Verified User'),
+          displayName: credential.user.displayName || (verified.isSuperAdmin ? 'Platform Super Admin' : 'Verified User'),
+          email: credential.user.email || loginEmail,
+          phoneNumber: credential.user.phoneNumber || '',
+          preferredLanguage: 'en',
+          accountStatus: 'ACTIVE',
+          onboardingCompleted: true,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+          lastLoginAt: nowIso,
+          primaryRole: verified.role,
+          role: verified.role,
+          isSuperAdmin: verified.isSuperAdmin,
+          customClaimsRole: verified.rawClaimRole,
+          societyId: claims.societyId as string | undefined,
+          companyId: claims.companyId as string | undefined,
+          gateAssigned: claims.gateAssigned as string | undefined,
+          platformRole:
+            verified.rawClaimRole && verified.role === 'PLATFORM_STAFF'
+              ? verified.rawClaimRole
+              : undefined,
+        };
+
+    // If verified Super Admin via Custom Claims had no Firestore user doc yet, sync it cleanly
+    if (!firestoreProfile && verified.isSuperAdmin && db) {
+      try {
+        await setDoc(doc(db, 'users', credential.user.uid), liveProfile, { merge: true });
+      } catch (syncErr) {
+        console.warn('[AuthService] Optional Super Admin profile sync skipped:', syncErr);
+      }
+    }
+
     try {
       assertAccountCanAuthenticate(liveProfile, loginEmail);
     } catch (statusErr) {
@@ -881,22 +1036,19 @@ export async function signInWithEmail(
     }
 
     resetLoginRateLimit(lowerInput);
-    const resolvedRole = normalizeUserRole(
-      liveProfile.primaryRole || liveProfile.role || (liveProfile.isSuperAdmin ? 'SUPER_ADMIN' : 'RESIDENT')
-    );
-    return { user: liveProfile, role: resolvedRole };
+    return { user: liveProfile, role: verified.role };
   }
 
   // SANDBOX / LOCAL DEV PATH (IS_DEV_MODE === true only)
   if (!IS_DEV_MODE) {
-    throw new Error('Firebase authentication is required in production mode.');
+    throw new Error('Firebase authentication is required in production mode. Please configure VITE_FIREBASE_* variables.');
   }
 
-  const user = await findRegisteredUserByIdentifier(lowerInput);
+  const user = await findRegisteredUserByIdentifier(trimmedInput);
   if (!user) {
     recordFailedLoginAttempt(lowerInput);
     throw new Error(
-      'Account Not Found: No Happiiz Gate account found with this Email, Username, or Login ID.'
+      'Invalid Login ID or Password. No account found with this Email, Login ID, or Mobile Number.'
     );
   }
 
@@ -939,9 +1091,9 @@ export async function signInWithEmail(
 
   if (effectiveStaffOrCustomPassword) {
     isPasswordValid = password === effectiveStaffOrCustomPassword;
-  } else if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
+  } else if (import.meta.env.DEV) {
     const devPasswords = ['Happiiz@2026', 'GatePass@123', 'Admin@123', 'Password@123', 'Emerald@2026'];
-    const customSandboxPwd = import.meta.env?.VITE_SANDBOX_TEST_PASSWORD;
+    const customSandboxPwd = import.meta.env.VITE_SANDBOX_TEST_PASSWORD;
     isPasswordValid =
       devPasswords.includes(password) || Boolean(customSandboxPwd && password === customSandboxPwd);
   }
@@ -953,7 +1105,7 @@ export async function signInWithEmail(
     } catch (fbErr: any) {
       if ((fbErr.code === 'auth/wrong-password' || fbErr.code === 'auth/invalid-credential') && !isPasswordValid) {
         recordFailedLoginAttempt(lowerInput);
-        throw new Error('Incorrect Password: The password you entered is incorrect. Please try again.');
+        throw new Error('Invalid Login ID or Password. Please verify your credentials or tap Forgot Password.');
       }
     }
   }
@@ -961,7 +1113,7 @@ export async function signInWithEmail(
   if (!isPasswordValid) {
     recordFailedLoginAttempt(lowerInput);
     throw new Error(
-      'Incorrect Password: The password you entered is incorrect. Please check your credentials or click Forgot Password.'
+      'Invalid Login ID or Password. Please verify your credentials or tap Forgot Password.'
     );
   }
 
@@ -1179,7 +1331,7 @@ export async function verifyPasswordResetOtp(
   }
 
   // 3. Verify OTP digits
-  const isDevBypassOtp = IS_DEV_MODE && import.meta.env?.DEV && enteredOtp === '123456';
+  const isDevBypassOtp = IS_DEV_MODE && import.meta.env.DEV && enteredOtp === '123456';
   if (enteredOtp !== state.otpCode && !isDevBypassOtp) {
     state.attempts += 1;
     localStorage.setItem(resetKey, JSON.stringify(state));
@@ -1282,7 +1434,7 @@ export async function updateUserAccountPassword(
   // If current password provided and existing stored password exists, verify it
   if (currentPassword && currentPassword.trim()) {
     const existing = getUserStoredPassword(uid);
-    const isDevBypassPwd = IS_DEV_MODE && import.meta.env?.DEV && (currentPassword === 'password123' || currentPassword === '123456');
+    const isDevBypassPwd = IS_DEV_MODE && import.meta.env.DEV && (currentPassword === 'password123' || currentPassword === '123456');
     if (existing && existing !== currentPassword && !isDevBypassPwd) {
       throw new Error('Current password does not match our records.');
     }

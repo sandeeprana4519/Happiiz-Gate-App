@@ -28,9 +28,21 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     return <LoadingScreen message="Verifying security credentials & access permissions..." />;
   }
 
-  // Not logged in -> send to centralized login
+  // Not logged in -> send to the single Universal Login page
   if (!user) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+    const params = new URLSearchParams();
+    const fullReturnPath = `${location.pathname}${location.search || ''}`;
+    if (fullReturnPath && fullReturnPath !== '/' && fullReturnPath !== '/login') {
+      params.set('returnTo', fullReturnPath);
+    }
+    const queryStr = params.toString();
+    return (
+      <Navigate
+        to={queryStr ? `/login?${queryStr}` : '/login'}
+        state={{ from: location }}
+        replace
+      />
+    );
   }
 
   // If user profile has not completed onboarding

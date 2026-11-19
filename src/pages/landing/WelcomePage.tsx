@@ -21,14 +21,11 @@ export const WelcomePage: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const handleLaunchPortal = (path: string, demoRole?: 'SECURITY_GUARD' | 'RESIDENT' | 'SERVICE_PARTNER') => {
+  const handleLaunchPortal = (path: string, _legacyRoleHint?: 'SECURITY_GUARD' | 'RESIDENT' | 'SERVICE_PARTNER') => {
     if (user) {
       navigate(path);
-    } else if (demoRole) {
-      // Direct navigation to portal (will route to login if unauthenticated or demo session)
-      navigate(`/login?returnTo=${encodeURIComponent(path)}`);
     } else {
-      navigate('/login');
+      navigate(`/login?returnTo=${encodeURIComponent(path)}`);
     }
   };
 
@@ -133,7 +130,7 @@ export const WelcomePage: React.FC = () => {
                 variant="primary"
                 size="md"
                 className="w-full text-xs font-bold"
-                onClick={() => handleLaunchPortal('/dashboard/guard', 'SECURITY_GUARD')}
+                onClick={() => handleLaunchPortal('/guard', 'SECURITY_GUARD')}
               >
                 Launch Gate Guard →
               </Button>
@@ -239,7 +236,7 @@ export const WelcomePage: React.FC = () => {
                 variant="primary"
                 size="md"
                 className="w-full text-xs font-bold"
-                onClick={() => handleLaunchPortal('/dashboard/service-partner', 'SERVICE_PARTNER')}
+                onClick={() => handleLaunchPortal('/partner', 'SERVICE_PARTNER')}
               >
                 Enter Partner Hub →
               </Button>

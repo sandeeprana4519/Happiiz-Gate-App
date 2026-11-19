@@ -1,0 +1,20 @@
+{
+  "name": "happiiz-gate-functions",
+  "description": "Trusted Firebase Cloud Functions for Happiiz Gate role verification and Super Admin Custom Claims management",
+  "main": "lib/index.js",
+  "engines": {
+    "node": "20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "deploy": "firebase deploy --only functions"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.0.0",
+    "firebase-functions": "^6.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  },
+  "private": true
+}

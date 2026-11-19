@@ -97,21 +97,21 @@ export const Footer: React.FC = () => {
               </ul>
             </div>
 
-            {/* Column 3: Administrative Access (5 cols on lg) */}
+            {/* Column 3: Administrative & Portal Access (5 cols on lg) */}
             <div className="lg:col-span-5 space-y-3.5">
               <div className="flex items-center gap-1.5">
                 <Lock className="w-3.5 h-3.5 text-purple-400" />
                 <h4 className="text-xs font-bold uppercase tracking-wider text-white">
-                  Administrative Access
+                  Administrative Portals
                 </h4>
               </div>
               <p className="text-[11px] text-gray-400 leading-relaxed">
-                Dedicated web portals for society administrators, security supervisors, assigned staff, and platform executives.
+                All roles authenticate through one universal Happiiz Gate Sign In and are routed automatically to their authorized workspace.
               </p>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-0.5">
                 <Link
-                  to="/login?role=SOCIETY_ADMIN"
+                  to="/society"
                   className="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-[#111726] border border-white/10 hover:border-purple-500/60 hover:bg-[#171F33] text-gray-100 group transition-all"
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
@@ -131,7 +131,7 @@ export const Footer: React.FC = () => {
                 </Link>
 
                 <Link
-                  to="/login?role=SECURITY_STAFF"
+                  to="/security-staff"
                   className="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-[#111726] border border-white/10 hover:border-emerald-500/60 hover:bg-[#171F33] text-gray-100 group transition-all"
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
@@ -151,7 +151,7 @@ export const Footer: React.FC = () => {
                 </Link>
 
                 <Link
-                  to="/login?role=PLATFORM_STAFF"
+                  to="/platform-staff"
                   className="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-[#111726] border border-white/10 hover:border-indigo-400/60 hover:bg-[#171F33] text-gray-100 group transition-all"
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
@@ -160,10 +160,10 @@ export const Footer: React.FC = () => {
                     </div>
                     <div className="min-w-0">
                       <span className="block text-xs font-semibold text-white truncate">
-                        Admin Platform Staff
+                        Platform Staff
                       </span>
                       <span className="block text-[10px] text-gray-400 truncate">
-                        Platform Team Portal
+                        Operations &amp; Support
                       </span>
                     </div>
                   </div>
@@ -171,7 +171,7 @@ export const Footer: React.FC = () => {
                 </Link>
 
                 <Link
-                  to="/login?role=SUPER_ADMIN"
+                  to="/super-admin"
                   className="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-[#111726] border border-white/10 hover:border-red-500/60 hover:bg-[#171F33] text-gray-100 group transition-all"
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
@@ -192,10 +192,16 @@ export const Footer: React.FC = () => {
               </div>
               <div className="pt-1 flex flex-wrap items-center gap-4 text-[11px]">
                 <Link
-                  to="/login?role=SOCIETY_STAFF"
+                  to="/login"
+                  className="text-purple-400 hover:text-purple-300 font-semibold hover:underline underline-offset-4 transition-colors"
+                >
+                  Universal Portal Sign In &rarr;
+                </Link>
+                <Link
+                  to="/dashboard/society-staff"
                   className="text-teal-400 hover:text-teal-300 font-semibold hover:underline underline-offset-4 transition-colors"
                 >
-                  Society Staff Login &rarr;
+                  Society Staff Workspace &rarr;
                 </Link>
               </div>
             </div>

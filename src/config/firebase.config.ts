@@ -50,7 +50,6 @@ function isPlaceholderValue(val?: string): boolean {
     lower.includes('yourapikeyhere') ||
     lower.includes('your_') ||
     lower.includes('placeholder') ||
-    lower.includes('happiiz-gate-prod') ||
     lower.includes('123456789012') ||
     lower.includes('abcdef123456789') ||
     lower.includes('your-project') ||
@@ -166,3 +165,20 @@ export const IS_PRODUCTION_BUILD: boolean =
 export const IS_DEV_MODE: boolean = isFirebaseConfigured
   ? !IS_PRODUCTION_BUILD && String(env.VITE_ENABLE_DEV_MOCK_AUTH || '').toLowerCase() === 'true'
   : !IS_PRODUCTION_BUILD || String(env.VITE_ENABLE_DEV_MOCK_AUTH || '').toLowerCase() === 'true';
+
+/**
+ * Non-secret runtime diagnostics for Firebase Auth & environment troubleshooting.
+ * Never returns API keys, tokens, or credentials.
+ */
+export function getFirebaseDiagnostics() {
+  return {
+    isFirebaseConfigured,
+    isUsingPlaceholderConfig,
+    isProductionBuild: IS_PRODUCTION_BUILD,
+    isDevMode: IS_DEV_MODE,
+    projectId: firebaseValidation.config?.projectId || null,
+    authDomain: firebaseValidation.config?.authDomain || null,
+    missingKeys: firebaseValidation.missingKeys,
+    configError: firebaseValidation.errorMessage,
+  };
+}

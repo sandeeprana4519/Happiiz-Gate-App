@@ -38,6 +38,7 @@ service cloud.firestore {
     function isSuperAdmin() {
       return isAuthenticated() && (
         request.auth.token.role == 'SUPER_ADMIN' ||
+        request.auth.token.isSuperAdmin == true ||
         (userDocExists() && (
           getUserData().role == 'SUPER_ADMIN' ||
           getUserData().primaryRole == 'SUPER_ADMIN' ||
@@ -46,19 +47,35 @@ service cloud.firestore {
       );
     }
 
+    function isPlatformRoleValue(r) {
+      return r in [
+        'PLATFORM_STAFF',
+        'PLATFORM_ADMIN_STAFF',
+        'PLATFORM_ADMIN',
+        'PLATFORM_SUPPORT',
+        'PLATFORM_FINANCE',
+        'PLATFORM_OPERATIONS',
+        'PLATFORM_READ_ONLY'
+      ];
+    }
+
     function isPlatformStaff() {
-      return isAuthenticated() && isAccountActive() && userDocExists() && (
-        getUserData().primaryRole == 'PLATFORM_STAFF' ||
-        getUserData().primaryRole == 'PLATFORM_ADMIN_STAFF' ||
-        getUserData().role == 'PLATFORM_STAFF' ||
-        getUserData().role == 'PLATFORM_ADMIN_STAFF'
+      return isAuthenticated() && isAccountActive() && (
+        isPlatformRoleValue(request.auth.token.role) ||
+        (userDocExists() && (
+          isPlatformRoleValue(getUserData().primaryRole) ||
+          isPlatformRoleValue(getUserData().role)
+        ))
       );
     }
 
     function isDigitalSupporter() {
-      return isAuthenticated() && isAccountActive() && userDocExists() && (
-        getUserData().primaryRole == 'DIGITAL_SUPPORTER' ||
-        getUserData().role == 'DIGITAL_SUPPORTER'
+      return isAuthenticated() && isAccountActive() && (
+        request.auth.token.role in ['DIGITAL_SUPPORTER', 'PLATFORM_SUPPORT'] ||
+        (userDocExists() && (
+          getUserData().primaryRole in ['DIGITAL_SUPPORTER', 'PLATFORM_SUPPORT'] ||
+          getUserData().role in ['DIGITAL_SUPPORTER', 'PLATFORM_SUPPORT']
+        ))
       );
     }
 
@@ -82,7 +99,7 @@ service cloud.firestore {
         isSuperAdmin() ||
         (
           memberExists(societyId) &&
-          getMemberDoc(societyId).role == 'SOCIETY_ADMIN' &&
+          getMemberDoc(societyId).role in ['SOCIETY_ADMIN', 'COMPANY_ADMIN'] &&
           getMemberDoc(societyId).membershipStatus == 'ACTIVE'
         )
       );
@@ -93,7 +110,7 @@ service cloud.firestore {
         isSocietyAdmin(societyId) ||
         (
           memberExists(societyId) &&
-          getMemberDoc(societyId).role == 'SECURITY_STAFF' &&
+          getMemberDoc(societyId).role in ['SECURITY_STAFF', 'SECURITY_SUPERVISOR'] &&
           getMemberDoc(societyId).membershipStatus == 'ACTIVE'
         )
       );
@@ -115,7 +132,7 @@ service cloud.firestore {
         isSecurityStaff(societyId) ||
         (
           memberExists(societyId) &&
-          (getMemberDoc(societyId).role == 'SECURITY_GUARD' || getMemberDoc(societyId).role == 'GATE_GUARD') &&
+          getMemberDoc(societyId).role in ['SECURITY_GUARD', 'GATE_GUARD'] &&
           getMemberDoc(societyId).membershipStatus == 'ACTIVE'
         )
       );
@@ -146,18 +163,18 @@ service cloud.firestore {
       allow get: if isOwner(userId) || isSuperAdmin() || isPlatformStaff();
       allow list: if isSuperAdmin() || isPlatformStaff();
 
-      allow create: if isOwner(userId) && isValidId(userId) &&
+      allow create: if isSuperAdmin() || (
+        isOwner(userId) && isValidId(userId) &&
         (!('role' in request.resource.data) || (
           request.resource.data.role != 'SUPER_ADMIN' &&
-          request.resource.data.role != 'PLATFORM_STAFF' &&
-          request.resource.data.role != 'PLATFORM_ADMIN_STAFF'
+          !isPlatformRoleValue(request.resource.data.role)
         )) &&
         (!('primaryRole' in request.resource.data) || (
           request.resource.data.primaryRole != 'SUPER_ADMIN' &&
-          request.resource.data.primaryRole != 'PLATFORM_STAFF' &&
-          request.resource.data.primaryRole != 'PLATFORM_ADMIN_STAFF'
+          !isPlatformRoleValue(request.resource.data.primaryRole)
         )) &&
-        (!('isSuperAdmin' in request.resource.data) || request.resource.data.isSuperAdmin == false);
+        (!('isSuperAdmin' in request.resource.data) || request.resource.data.isSuperAdmin == false)
+      );
 
       allow update: if isSuperAdmin() || (
         isOwner(userId) && unchangedUserPrivilegeFields()
