@@ -1,0 +1,33 @@
+{
+  "id": "/supporter/",
+  "name": "Happiiz Supporter — Field Helpdesk",
+  "short_name": "Happiiz Supporter",
+  "description": "Standalone Digital Supporter Mobile App for assigned support tickets, society assistance & priority alerts.",
+  "start_url": "/supporter/",
+  "scope": "/supporter/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#1E3A8A",
+  "background_color": "#1E1B4B",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "/supporter/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/supporter/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/supporter/pwa-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

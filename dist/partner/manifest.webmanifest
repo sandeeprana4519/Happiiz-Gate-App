@@ -1,0 +1,33 @@
+{
+  "id": "/partner/",
+  "name": "Happiiz Partner — Service Operations",
+  "short_name": "Happiiz Partner",
+  "description": "Standalone Service Partner Mobile App for resident bookings, work orders, gate entry passes & payouts.",
+  "start_url": "/partner/",
+  "scope": "/partner/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#92400E",
+  "background_color": "#1C1917",
+  "categories": ["business", "utilities"],
+  "icons": [
+    {
+      "src": "/partner/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/partner/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/partner/pwa-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
